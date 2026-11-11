@@ -7,6 +7,8 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+# SQLite dùng khi dev không có Postgres
+*.db
 
 # Node / React
 node_modules/
