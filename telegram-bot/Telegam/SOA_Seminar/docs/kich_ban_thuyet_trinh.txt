@@ -1,0 +1,111 @@
+================================================================================
+KỊCH BẢN THUYẾT TRÌNH SEMINAR: TÍCH HỢP SYSTEM NOTIFICATION QUA TELEGRAM BOT API
+Môn học: Kiến trúc hướng dịch vụ (SOA)
+Người trình bày lý thuyết: Bạn
+Người hướng dẫn tích hợp & demo: Bạn Thái
+================================================================================
+
+--------------------------------------------------------------------------------
+PHẦN 1: MỞ ĐẦU & SLIDE 1 (WHAT - KHÁI NIỆM CỐT LÕI)
+--------------------------------------------------------------------------------
+Dạ, em chào thầy cô và các bạn. Hôm nay, em xin đại diện nhóm trình bày phần lý thuyết nền tảng về đề tài: Tích hợp System Notification thông qua Telegram Bot API.
+
+Để mọi người dễ theo dõi, bài trình bày của em gồm bốn nội dung chính:
+1. Thứ nhất là khái niệm Telegram Bot API và System Notification.
+2. Thứ hai là các công nghệ được sử dụng.
+3. Thứ ba là ứng dụng vào bài toán khảo sát sau bán hàng.
+4. Và cuối cùng là sơ đồ kiến trúc cùng luồng hoạt động của hệ thống.
+
+Sau phần lý thuyết, bạn Thái sẽ hướng dẫn cách tích hợp và trực tiếp demo dự án. Để chuẩn bị cho phần thực hành, mọi người vui lòng vào nhóm Zalo để tải project về trước, cài Python 3.10 trở lên và chuẩn bị sẵn tài khoản Telegram nhé.
+
+(Ngắt nhịp nhẹ)
+
+Đầu tiên, em xin giới thiệu Telegram Bot API là gì.
+Nói đơn giản, Telegram Bot API là giao diện do Telegram cung cấp, cho phép lập trình viên tạo và điều khiển bot bằng code. Thay vì phải nhắn tin thủ công, chúng ta có thể lập trình để bot tự động gửi tin nhắn, nhận dữ liệu và tương tác với người dùng. 
+
+Về mặt kỹ thuật, ứng dụng sẽ gửi các HTTP request đến Telegram Bot API. Việc giao tiếp bằng chuẩn HTTP và JSON này giúp hệ thống hoàn toàn độc lập về ngôn ngữ lập trình, đúng với tinh thần của Service Contract trong môn SOA.
+
+Để tạo bot, chúng ta tìm tài khoản @BotFather trên Telegram, sử dụng lệnh /newbot và làm theo hướng dẫn. Sau khi tạo xong, Telegram sẽ cung cấp một Bot Token. Mọi người có thể hiểu Token giống như mật khẩu của bot, dùng để xác thực các yêu cầu gọi API, nên cần được bảo mật và không đưa trực tiếp lên GitHub.
+
+Tiếp theo là System Notification, hay còn gọi là thông báo hệ thống.
+Đây là cơ chế giúp hệ thống tự động gửi thông báo khi có một sự kiện xảy ra, thay vì chờ người dùng chủ động kiểm tra. Ví dụ, khi server gặp lỗi hoặc thanh toán thất bại, hệ thống có thể gửi thông báo cho người phụ trách để họ biết và xử lý kịp thời.
+
+System Notification có bốn đặc điểm chính:
+- Thứ nhất là hướng sự kiện, nghĩa là thông báo được kích hoạt khi có sự kiện xảy ra.
+- Thứ hai là tính chủ động, tức là hệ thống tự gửi thông báo mà không cần người dùng yêu cầu trước.
+- Thứ ba là tính kịp thời, giúp người nhận sớm nắm được tình hình.
+- Cuối cùng là nội dung ngắn gọn, rõ ràng, giúp người nhận nhanh chóng hiểu vấn đề.
+
+Để mọi người dễ hình dung: Giả sử hệ thống iBanking có một giao dịch chuyển tiền bị lỗi. Việc giao dịch thất bại chính là sự kiện kích hoạt (hướng sự kiện). Ngay lập tức, hệ thống Backend chủ động đẩy một tin nhắn cảnh báo qua Telegram cho đội IT mà không cần họ phải F5 làm mới trang web (tính chủ động). Thông báo nảy lên điện thoại chỉ trong chưa tới 1 giây (tính kịp thời), với nội dung đi thẳng vào trọng tâm: 'Lỗi giao dịch ID 123 tại Server A lúc 10h sáng' (ngắn gọn, có ngữ cảnh). Nhờ đó, IT biết chính xác cần sửa ở đâu mà không phải đọc log hệ thống dài dòng.
+
+Đặc biệt trong đề tài này, nhóm không chỉ sử dụng Telegram để gửi thông báo mà còn tận dụng khả năng tương tác hai chiều của bot để nhận phản hồi khảo sát từ khách hàng.
+
+Tiếp theo là một số thuật ngữ quan trọng:
+- Đầu tiên là Bot Token, dùng để xác thực bot khi gọi Telegram Bot API.
+- Update là dữ liệu Telegram cung cấp cho bot khi có tương tác mới, chẳng hạn như người dùng gửi tin nhắn hoặc bấm nút đánh giá.
+- Message là tin nhắn, còn Chat ID là mã định danh cuộc trò chuyện để bot xác định nơi cần gửi tin nhắn.
+- Ngoài ra, có hai cách phổ biến để bot nhận dữ liệu cập nhật là Long Polling và Webhook. Với Long Polling, bot chủ động gửi yêu cầu đến Telegram để lấy các cập nhật mới. Còn với Webhook, Telegram gửi dữ liệu đến một địa chỉ mà ứng dụng đã đăng ký. Nếu sử dụng Long Polling, ứng dụng không cần cung cấp một endpoint HTTPS công khai để Telegram gọi vào. Tuy nhiên, ứng dụng vẫn sử dụng HTTPS khi giao tiếp với Telegram Bot API.
+- Cuối cùng là Command, tức các lệnh bắt đầu bằng dấu gạch chéo, ví dụ /start, để người dùng tương tác với bot.
+
+Như vậy, Telegram Bot API cung cấp các công cụ cần thiết để ứng dụng tự động gửi tin nhắn và nhận tương tác từ Telegram.
+
+
+--------------------------------------------------------------------------------
+PHẦN 2: SLIDE 2 (WHAT - CÁC CÔNG NGHỆ ĐƯỢC SỬ DỤNG)
+--------------------------------------------------------------------------------
+(Chuyển slide / Ngắt nhịp)
+
+Sau khi đã tìm hiểu các khái niệm cơ bản, tiếp theo em xin giới thiệu những công nghệ được sử dụng để triển khai hệ thống. Hệ thống của nhóm được chia làm hai phần rõ rệt:
+
+- Về phía Bot và xử lý tương tác: Nhóm dùng Java 17 kết hợp Spring Boot, sử dụng trực tiếp thư viện Telegram Bots và giấu Bot Token vào file .env để bảo mật.
+- Còn về phía hệ thống đẩy thông báo: Nhóm sử dụng Python kết hợp với FastAPI để làm một Notification Service độc lập.
+
+
+--------------------------------------------------------------------------------
+PHẦN 3: SLIDE 3 (WHY - BÀI TOÁN KHẢO SÁT SAU BÁN HÀNG)
+--------------------------------------------------------------------------------
+(Chuyển slide / Nhấn giọng)
+
+Ở đây, nhóm tập trung vào bài toán Khảo sát sau bán hàng (Post-sale Survey), nhằm giải quyết 2 nỗi đau lớn của doanh nghiệp: Thu thập phản hồi quá chậm và dễ bỏ sót các phản hồi tiêu cực của khách hàng.
+
+Nhóm tận dụng 2 thế mạnh lớn của Telegram ở 2 cột:
+
+- Cột 1 là Tính chủ động và tức thì: Nếu gửi email khảo sát, khách rất dễ bỏ qua hoặc mail bị trôi vào hộp thư rác; còn SMS thì tốn phí từng tin. Với Telegram, khi khách dùng xong dịch vụ, backend chỉ cần gọi một API POST /survey, bot sẽ chủ động đẩy (Push) phiếu khảo sát 5 sao tới điện thoại khách gần như tức thì và hoàn toàn miễn phí. Khách nhận được ngay trên khung chat mà không cần phải mở email hay truy cập link web.
+
+- Cột 2 là Khả năng tương tác hai chiều mượt mà: Khách hàng thời nay rất ngại điền form dài. Với Telegram, các nút bấm trực quan (Inline Keyboard) cho phép khách phản hồi chỉ bằng đúng một lần chạm:
+  + Nếu khách chấm từ 2 sao trở xuống (không hài lòng): Bot sẽ hỏi lý do và lập tức cảnh báo tới đội CSKH qua Telegram để can thiệp kịp thời.
+  + Nếu khách chấm từ 3 sao trở lên (hài lòng): Bot sẽ cảm ơn và hỏi ý kiến đóng góp.
+  + Nếu khách không muốn gõ chữ, khách chỉ cần gõ lệnh /skip để bỏ qua mà số sao vẫn được lưu lại.
+
+Nhờ đó, doanh nghiệp nắm bắt được phản hồi ngay lập tức thay vì phải chờ đợi báo cáo.
+
+
+--------------------------------------------------------------------------------
+PHẦN 4: SLIDE 4 (HOW - SƠ ĐỒ KIẾN TRÚC VÀ LUỒNG HOẠT ĐỘNG)
+--------------------------------------------------------------------------------
+(Chuyển slide / Chỉ tay lên sơ đồ)
+
+Để hiểu rõ cách hai hệ thống Java và Python phối hợp với nhau ra sao, mời thầy cô và các bạn nhìn lên sơ đồ kiến trúc. Mọi người sẽ thấy hệ thống được chia làm 2 luồng rõ rệt:
+- Dòng phía trên là Luồng gửi phiếu khảo sát (hướng gửi).
+- Dòng phía dưới là Luồng nhận phản hồi từ khách hàng và lưu kết quả (hướng nhận).
+
+Cụ thể gồm 6 bước như sau:
+- Bước 1: Khi dịch vụ hoàn tất, nguồn sự kiện (trong bài demo là script trigger_survey.py) sẽ gọi request POST /survey sang Notification Service chạy bằng Python FastAPI ở cổng 8000.
+- Bước 2: Notification Service sẽ gọi API sendMessage lên Telegram Bot API.
+- Bước 3: Server Telegram đẩy ngay phiếu khảo sát 5 sao về ứng dụng Telegram trên điện thoại của khách.
+- Bước 4: Khách hàng chỉ việc bấm vào số sao mong muốn ngay trên màn hình chat.
+- Bước 5: Thao tác bấm nút của khách được gửi lên Telegram server dưới dạng một Update. Lúc này, Bot Java (Spring Boot) đang chạy cơ chế Long Polling sẽ chủ động lấy gói Update này về.
+- Bước 6: Bot Java xử lý câu trả lời theo số sao và tiến hành lưu kết quả khảo sát vào file CSV để phục vụ việc theo dõi và tổng hợp.
+
+Điểm nổi bật về mặt kiến trúc SOA là nhóm đã tách biệt hoàn toàn: Notification Service (Python) chuyên trách việc gửi phiếu, còn Bot Java chuyên trách việc nhận và xử lý tương tác của khách hàng. Thiết kế này tuân thủ nguyên tắc Khớp nối lỏng (Loose Coupling) và mang lại tính Tái sử dụng (Reusability) cao.
+
+
+--------------------------------------------------------------------------------
+PHẦN 5: KẾT THÚC & BÀN GIAO CHO BẠN THÁI DEMO
+--------------------------------------------------------------------------------
+Vừa rồi là toàn bộ lý thuyết, công nghệ và luồng hoạt động tổng thể của hệ thống. 
+
+Tiếp theo, em xin nhường lại phần trình bày cho bạn Thái để hướng dẫn cách tích hợp thực tế và chạy demo dự án cho thầy cô và các bạn cùng theo dõi ạ.
+
+Em xin cảm ơn thầy cô và các bạn đã lắng nghe!
+================================================================================
