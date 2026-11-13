@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ---------- Request ----------
@@ -65,3 +65,73 @@ class OrderOut(BaseModel):
     created_at: datetime
     items: list[OrderItemOut]
     history: list[StatusHistoryOut]
+    
+class StatusUpdate(BaseModel):
+    # Nhân viên chỉ được đặt 3 trạng thái này.
+    # CONFIRMED do payment-service báo, ARRIVED và CANCELLED do khách.
+    status: Literal["PREPARING", "READY", "COMPLETED"]
+    note: str | None = Field(default=None, max_length=200)
+
+
+class InternalOrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    customer_id: int
+    station_id: int
+    status: str
+    payment_method: str
+    total_amount: int
+
+
+class PaymentConfirmIn(BaseModel):
+    transaction_ref: str | None = Field(default=None, max_length=100)
+    
+    # ---------- Mã giảm giá ----------
+class CouponCreate(BaseModel):
+    code: str = Field(min_length=3, max_length=30, pattern=r"^[A-Za-z0-9_-]+$")
+    discount_type: Literal["PERCENT", "FIXED"]
+    discount_value: int = Field(gt=0)
+    valid_from: date
+    valid_to: date
+    is_active: bool = True
+
+    @field_validator("code")
+    @classmethod
+    def upper_code(cls, v: str) -> str:
+        return v.upper()
+
+    @model_validator(mode="after")
+    def check_rules(self):
+        if self.valid_to < self.valid_from:
+            raise ValueError("valid_to phải sau hoặc bằng valid_from")
+        if self.discount_type == "PERCENT" and self.discount_value > 100:
+            raise ValueError("Giảm theo % không được vượt quá 100")
+        return self
+
+
+class CouponUpdate(BaseModel):
+    # Không cho đổi code (đơn cũ đã lưu code này)
+    discount_type: Literal["PERCENT", "FIXED"] | None = None
+    discount_value: int | None = Field(default=None, gt=0)
+    valid_from: date | None = None
+    valid_to: date | None = None
+    is_active: bool | None = None
+
+
+class CouponOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+    discount_type: str
+    discount_value: int
+    valid_from: date
+    valid_to: date
+    is_active: bool
+
+
+class CouponCheckOut(BaseModel):
+    code: str
+    discount_amount: int
+    total_amount: int

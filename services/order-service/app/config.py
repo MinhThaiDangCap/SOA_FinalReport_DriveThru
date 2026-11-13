@@ -15,10 +15,9 @@ DATABASE_URL = (
     f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{ORDER_DB}"
 )
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change_me_to_a_long_random_string")
+JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-
-INTERNAL_KEY = os.getenv("INTERNAL_KEY", "change_me_internal_key")
+INTERNAL_KEY = os.environ["INTERNAL_KEY"]
 
 MENU_SERVICE_URL = os.getenv("MENU_SERVICE_URL", "http://localhost:8002")
 
