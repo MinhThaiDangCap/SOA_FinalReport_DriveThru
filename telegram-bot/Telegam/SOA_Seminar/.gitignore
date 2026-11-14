@@ -1,0 +1,17 @@
+target/
+.mvn/wrapper/maven-wrapper.jar
+HELP.md
+.vscode/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Kết quả khảo sát demo
+data/

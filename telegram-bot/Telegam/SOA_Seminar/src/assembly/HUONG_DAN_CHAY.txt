@@ -1,0 +1,99 @@
+HƯỚNG DẪN CHẠY - SOA Seminar (Telegram Bot + Notification Service)
+====================================================================
+
+Gói này gồm:
+  telebotdemo-0.0.1-SNAPSHOT.jar   Bot Telegram (Java, Spring Boot) - đã build sẵn
+  notification-service/            Notification Service (Python)
+  .env.example                     Mẫu cấu hình (KHÔNG chứa token thật)
+  README.md                        Mô tả dự án
+  data/                            (tự tạo khi chạy) chứa danh sách khách và kết quả khảo sát
+      customers.csv                  Danh sách khách đã nhắn bot + mã khách (KH001, KH002...)
+      survey_results.csv             Kết quả khảo sát khách đã chấm
+
+YÊU CẦU
+-------
+  - Java JDK/JRE 17 trở lên   (kiểm tra: java -version)
+  - Python 3.9 trở lên        (kiểm tra: python --version)
+  - Mỗi người tự tạo 1 bot riêng bằng @BotFather trên Telegram.
+    Không dùng chung token với người khác (Telegram sẽ báo lỗi 409).
+
+BƯỚC 1: TẠO FILE .env
+---------------------
+  Copy .env.example thành .env (cùng thư mục với file .jar) rồi điền:
+    BOT_TOKEN, BOT_USERNAME, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, SERVICE_API_KEY
+  TELEGRAM_CHAT_ID: mở bot trên Telegram, bấm Start 1 lần, rồi nhắn
+  @userinfobot để biết chat_id của bạn.
+  (TELEGRAM_CHAT_ID là chat_id của quản trị/CSKH: nhận cảnh báo khi khách chấm
+   thấp điểm, và là nơi nhận phiếu khi bạn gửi thử mà không chỉ định khách.)
+
+BƯỚC 2: CHẠY BOT JAVA (cửa sổ terminal 1)
+-----------------------------------------
+  java -jar telebotdemo-0.0.1-SNAPSHOT.jar
+  (file .env phải nằm cùng thư mục bạn đang đứng khi chạy lệnh này)
+  Giữ cửa sổ này mở suốt quá trình demo: bot Java chính là nơi tự lưu khách.
+
+BƯỚC 3: CHẠY NOTIFICATION SERVICE (cửa sổ terminal 2)
+-----------------------------------------------------
+  cd notification-service
+  pip install -r requirements.txt
+  py -m uvicorn notification_service:app --port 8000
+  (Bước này dùng để bot Java gửi cảnh báo tới CSKH khi khách chấm <= 2 sao.)
+
+BƯỚC 4: THU THẬP KHÁCH HÀNG (làm trên Telegram)
+-----------------------------------------------
+  Mỗi khách (hoặc mỗi tài khoản Telegram dùng để thử) mở bot và nhắn /start.
+  Bot trả lời kèm mã khách, ví dụ:
+      Mã khách hàng của bạn: KH001
+  Người thứ hai sẽ là KH002, người thứ ba là KH003, và cứ thế tiếp tục.
+  Một người nhắn nhiều lần vẫn chỉ có một mã.
+
+  Bot tự ghi vào data/customers.csv (nằm cùng thư mục chạy file .jar):
+      code,chat_id,name,username,registered_at
+      KH001,123456789,Nguyen Van A,vana,2026-10-14T10:00:00
+  Có thể mở file này để kiểm tra, hoặc sửa cột code thành tên dễ nhớ (vd: AN, BINH).
+  Lưu ý: người đã nhắn bot từ trước khi cập nhật code cần nhắn lại 1 lần để được lưu.
+
+BƯỚC 5: XEM DANH SÁCH KHÁCH (cửa sổ terminal 3)
+-----------------------------------------------
+  cd notification-service
+  python trigger_survey.py --list
+
+BƯỚC 6: GỬI PHIẾU KHẢO SÁT (cửa sổ terminal 3)
+----------------------------------------------
+  cd notification-service
+
+  Gửi cho 1 khách:
+    python trigger_survey.py --order ORD-1001 --service "Giặt ủi" --to KH001
+
+  Gửi cho nhiều khách cùng lúc (cách nhau bằng dấu cách):
+    python trigger_survey.py --order ORD-1001 --service "Giặt ủi" --to KH001 KH002
+
+  Gửi cho tất cả khách đã lưu:
+    python trigger_survey.py --order ORD-1001 --service "Giặt ủi" --all
+
+  Không có --to / --all: gửi về TELEGRAM_CHAT_ID của bạn (như bản cũ, để test nhanh).
+
+  Khi gửi cho nhiều khách, mã đơn tự thêm mã khách phía sau
+  (vd: ORD-1001-KH001, ORD-1001-KH002) để phân biệt trong kết quả khảo sát.
+  Nếu có khách chặn bot hoặc lỗi, chương trình báo lỗi riêng người đó rồi gửi tiếp
+  cho những người còn lại.
+
+  Mở Telegram: bot gửi phiếu 5 sao tới từng khách. Chấm <= 2 sao: bot hỏi lý do và
+  cảnh báo CSKH. Chấm >= 3 sao: bot hỏi góp ý. Kết quả lưu ở data/survey_results.csv
+  (cột chat_id đối chiếu được với data/customers.csv).
+  Gõ /skip để bỏ qua câu hỏi lý do/góp ý.
+
+LƯU Ý
+-----
+  - Không chia sẻ file .env (chứa token bot). Nếu lỡ lộ, vào @BotFather dùng /revoke.
+  - Telegram chỉ cho bot nhắn trước với người đã bấm Start ít nhất 1 lần.
+  - Telegram bot không gửi được theo số điện thoại, chỉ gửi theo chat_id. Vì vậy
+    dùng "mã khách" thay cho số điện thoại. Muốn lưu thêm số điện thoại, thêm cột
+    phone vào data/customers.csv bằng tay.
+  - Không chạy get_chat_id.py khi bot Java đang chạy (lỗi 409). Không cần dùng nữa
+    vì bot đã tự lưu chat_id.
+  - Danh sách khách nằm trong file CSV nên tắt/mở lại bot vẫn còn. Muốn xóa sạch
+    để demo lại từ đầu, xóa file data/customers.csv.
+  - Python mặc định đọc data/customers.csv ở thư mục cha của notification-service
+    (tức cùng chỗ với file .jar). Nếu để khác chỗ, thêm vào .env:
+        CUSTOMERS_FILE=đường_dẫn_đầy_đủ_tới_customers.csv

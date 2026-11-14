@@ -1,0 +1,202 @@
+=====================================================================
+HƯỚNG DẪN CHẠY VÀ TEST
+Đề tài: Telegram Bot API - System Notifications
+Môn: Kiến trúc hướng dịch vụ (SOA)
+=====================================================================
+
+CẤU TRÚC DỰ ÁN
+---------------------------------------------------------------------
+notifier.py               Thư viện lõi gửi thông báo qua Telegram
+monitor.py                Giám sát CPU/RAM/Disk và cảnh báo
+notification_service.py   Notification Service dạng REST API (FastAPI)
+get_chat_id.py            Script lấy chat_id
+requirements.txt          Danh sách thư viện cần cài
+.env.example              File cấu hình mẫu (copy thành .env)
+
+Lưu ý: các lệnh dưới đây dùng cho PowerShell trên Windows, chạy trong
+thư mục chứa code (ví dụ D:\Seminar).
+
+
+=====================================================================
+PHẦN A. CHUẨN BỊ
+=====================================================================
+
+A1. Yêu cầu
+    - Python 3.9 trở lên
+    - Tài khoản Telegram (dùng app điện thoại, Telegram Web hoặc Desktop)
+    - Kết nối mạng truy cập được api.telegram.org
+      (nếu bị timeout: dùng hotspot 4G hoặc VPN)
+
+A2. Tạo bot
+    1. Mở Telegram, tìm @BotFather, gõ /newbot
+    2. Đặt tên hiển thị và username (phải kết thúc bằng "bot")
+    3. Copy TOKEN mà BotFather trả về (dạng 123456789:AAH...)
+
+A3. Cài thư viện
+    pip install -r requirements.txt
+
+A4. Tạo file cấu hình
+    copy .env.example .env
+    Mở file .env, dán token vào dòng TELEGRAM_BOT_TOKEN
+    (không có dấu nháy, không có khoảng trắng quanh dấu =)
+    Nhấn Ctrl+S để LƯU (kiểm tra tab không còn dấu chấm trắng)
+
+
+=====================================================================
+PHẦN B. LẤY CHAT_ID
+=====================================================================
+
+B1. Mở Telegram, tìm bot vừa tạo, bấm START và gửi tin "hi"
+B2. Chạy:
+        python get_chat_id.py
+    Kết quả mong đợi:
+        chat_id = 123456789  (private, tên_của_bạn)
+B3. Mở .env, sửa dòng TELEGRAM_CHAT_ID thành số vừa lấy, Ctrl+S
+
+
+=====================================================================
+PHẦN C. CÁC BÀI TEST
+=====================================================================
+
+---------------------------------------------------------------------
+TEST 1: Gửi tin cơ bản (notifier.py)
+---------------------------------------------------------------------
+Lệnh:
+    python notifier.py
+
+Kết quả mong đợi:
+    - Terminal in: Bot: <username_bot>
+    - Telegram nhận tin "[INFO] Test thông báo"
+      (tin INFO gửi im lặng nên không có âm thanh - đúng thiết kế)
+
+---------------------------------------------------------------------
+TEST 2: Năm mức độ thông báo
+---------------------------------------------------------------------
+Lệnh:
+    python -c "from notifier import TelegramNotifier as T; n=T(); [n.notify(l,'Test '+l,'Noi dung thu nghiem <b>&</b>',service='demo') for l in ['INFO','SUCCESS','WARNING','ERROR','CRITICAL']]"
+
+Kết quả mong đợi:
+    - Nhận 5 tin với 5 icon khác nhau
+    - INFO và SUCCESS im lặng; WARNING, ERROR, CRITICAL có âm thanh
+    - Nội dung <b>&</b> hiện nguyên văn (chứng tỏ escape HTML hoạt động)
+
+---------------------------------------------------------------------
+TEST 3: Gửi file đính kèm
+---------------------------------------------------------------------
+Lệnh:
+    python -c "open('test.log','w').write('ERROR demo log'); from notifier import TelegramNotifier as T; T().send_document('test.log','Log thu nghiem')"
+
+Kết quả mong đợi:
+    - Nhận file test.log kèm chú thích "Log thu nghiem"
+
+---------------------------------------------------------------------
+TEST 4: Giám sát hệ thống (monitor.py)
+---------------------------------------------------------------------
+Chuẩn bị: mở .env, đổi tạm (để dễ kích hoạt cảnh báo)
+    CPU_THRESHOLD=1
+    CHECK_INTERVAL=10
+Lưu (Ctrl+S), rồi chạy:
+    python monitor.py
+
+Kết quả mong đợi:
+    1. Nhận tin "Monitor đã khởi động" (INFO)
+    2. Sau khoảng 10 giây: nhận WARNING "CPU vượt ngưỡng"
+    3. Các chu kỳ sau KHÔNG nhắn lại (cooldown 600s = chống spam)
+    4. Nhấn Ctrl+C: nhận tin "Monitor đã dừng"
+
+Sau khi test: trả .env về CPU_THRESHOLD=85 và CHECK_INTERVAL=30
+
+Test thông báo hồi phục (tuỳ chọn):
+    1. Đặt CPU_THRESHOLD=30, chạy python monitor.py
+    2. Mở terminal khác, chạy: python -c "while True: pass"
+       -> CPU tăng, nhận cảnh báo
+    3. Nhấn Ctrl+C tắt lệnh gây tải -> CPU giảm
+       -> nhận tin SUCCESS "đã trở lại bình thường"
+
+---------------------------------------------------------------------
+TEST 5: Notification Service (REST API)
+---------------------------------------------------------------------
+Bước 1. Chạy server (terminal này sẽ bị chiếm, để nguyên):
+    python -m uvicorn notification_service:app --port 8000
+
+Bước 2. Mở trình duyệt: http://localhost:8000/docs
+
+Bước 3. Test /health
+    GET /health -> Try it out -> Execute
+    Kết quả mong đợi: 200, {"status":"ok","bot":"<username_bot>"}
+
+Bước 4. Test gửi thông báo
+    POST /notify -> Try it out
+    - Ô x-api-key: nhập đúng giá trị SERVICE_API_KEY trong .env
+      (mặc định: my-secret-key)
+    - Body mẫu:
+        {
+          "service": "payment-service",
+          "level": "CRITICAL",
+          "title": "Thanh toán thất bại",
+          "message": "Order #1234: cổng thanh toán timeout sau 30s"
+        }
+    - Bấm Execute
+    Kết quả mong đợi:
+        - Swagger: mã 202, {"status":"queued",...}
+        - Telegram: nhận tin có dòng "Service: payment-service"
+
+Cách gọi bằng PowerShell (thay cho Swagger):
+    Invoke-RestMethod -Uri http://localhost:8000/notify -Method Post `
+      -Headers @{"X-API-Key"="my-secret-key"} -ContentType "application/json" `
+      -Body '{"service":"payment-service","level":"CRITICAL","title":"Thanh toan that bai","message":"Order 1234 timeout"}'
+
+---------------------------------------------------------------------
+TEST 6: Các trường hợp lỗi (đưa vào phần kiểm thử của báo cáo)
+---------------------------------------------------------------------
+| Tình huống     | Cách tạo                          | Kết quả mong đợi      |
+|----------------|-----------------------------------|-----------------------|
+| Sai API key    | Nhập x-api-key sai, Execute       | 401 Invalid API key   |
+| Sai level      | Sửa "level": "ABC"                | 422 Validation Error  |
+| Thiếu trường   | Xóa dòng "title" khỏi JSON        | 422 Validation Error  |
+| Tin quá dài    | message rất dài (>4096 ký tự)     | Tin bị cắt, không lỗi |
+| Sai chat_id    | Sửa TELEGRAM_CHAT_ID thành số bừa | Log: 400 chat not     |
+|                | (khởi động lại uvicorn)           | found (Swagger vẫn    |
+|                |                                   | 202 vì gửi chạy nền)  |
+| Sai token      | Sửa 1 ký tự trong token           | Lỗi 401 Unauthorized  |
+
+Test xong PHẢI khôi phục lại .env như ban đầu.
+
+
+=====================================================================
+PHẦN D. LỖI THƯỜNG GẶP VÀ CÁCH XỬ LÝ
+=====================================================================
+
+| Lỗi                            | Nguyên nhân / Cách sửa                       |
+|--------------------------------|----------------------------------------------|
+| 401 Unauthorized               | Token sai, hoặc .env chưa lưu (Ctrl+S).      |
+|                                | Kiểm tra tab .env không còn dấu chấm trắng.  |
+| 404 khi mở link getMe          | Link còn dấu < > . Bỏ 2 dấu này đi.          |
+| Read timed out                 | Mạng chặn/chậm Telegram. Đổi timeout=10      |
+|                                | thành 30; dùng hotspot 4G hoặc VPN.          |
+| "Chưa có tin nhắn nào"         | Chưa nhắn cho bot. Vào bot bấm Start, gửi    |
+|                                | "hi", chạy lại get_chat_id.py.               |
+| 403 Forbidden                  | Chưa bấm Start với bot, hoặc bot bị chặn.    |
+| 400 chat not found             | TELEGRAM_CHAT_ID sai.                        |
+| Thiếu TELEGRAM_BOT_TOKEN...    | Không thấy file .env: phải tên đúng ".env"   |
+|                                | và nằm cùng thư mục với code.                |
+| ModuleNotFoundError            | Chạy: pip install -r requirements.txt        |
+| uvicorn không nhận lệnh        | Dùng: python -m uvicorn notification_service |
+|                                | :app --port 8000                             |
+| Sửa .env nhưng server không    | Tắt server (Ctrl+C) và chạy lại, vì server   |
+| nhận giá trị mới               | chỉ đọc .env một lần lúc khởi động.          |
+| Swagger 202 nhưng không có tin | Xem terminal uvicorn: có dòng ERROR "Gửi     |
+|                                | Telegram thất bại" là lỗi mạng/token/chat_id.|
+
+
+=====================================================================
+PHẦN E. LƯU Ý BẢO MẬT
+=====================================================================
+1. KHÔNG chia sẻ token (ảnh chụp, GitHub, slide). Che dòng token khi
+   chụp màn hình.
+2. Nếu token bị lộ: vào @BotFather, gõ /revoke, chọn bot để lấy token
+   mới, rồi cập nhật lại .env.
+3. Không đưa file .env lên GitHub (thêm ".env" vào file .gitignore).
+4. Đổi SERVICE_API_KEY thành giá trị khó đoán khi dùng thật.
+
+

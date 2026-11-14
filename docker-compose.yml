@@ -1,0 +1,107 @@
+services:
+  # 1. PostgreSQL 16 (1 container, 5 database riêng biệt cho 5 microservices)
+  postgres:
+    image: postgres:16
+    container_name: drivethru_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-dbs.sql:/docker-entrypoint-initdb.d/init-dbs.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Auth Service (Đăng ký, Đăng nhập, JWT, Nhân viên, Liên kết Telegram)
+  auth-service:
+    build: ./auth-service
+    container_name: drivethru_auth
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      AUTH_DB: auth_db
+      JWT_SECRET: super_secret_jwt_key_drivethru_2026
+      INTERNAL_KEY: change_me_internal_key
+      BOT_USERNAME: ${BOT_USERNAME:-DriveThruSOABot}
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 3. Feedback Service (Đánh giá 1-5 sao, Thống kê Admin, Đồng bộ Telegram)
+  feedback-service:
+    build: ./feeback-service
+    container_name: drivethru_feedback
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      FEEDBACK_DB: feedback_db
+      JWT_SECRET: super_secret_jwt_key_drivethru_2026
+      INTERNAL_KEY: change_me_internal_key
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-my-secret-key}
+      ORDER_SERVICE_URL: http://order-service:8000
+      NOTIFICATION_SERVICE_URL: http://notification-service:8000
+      ORDER_SERVICE_FALLBACK: "true"
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 4. Notification Service (Gửi thông báo & khảo sát Telegram)
+  notification-service:
+    build: ./telegram-bot/Telegam/SOA_Seminar/notification-service
+    container_name: drivethru_notification
+    restart: always
+    env_file:
+      - ./telegram-bot/Telegam/SOA_Seminar/.env
+    environment:
+      SERVICE_API_KEY: ${SERVICE_API_KEY:-my-secret-key}
+      INTERNAL_KEY: change_me_internal_key
+    ports:
+      - "8006:8000"
+
+  # 5. Prometheus (Thu thập metrics từ toàn bộ microservices)
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: drivethru_prometheus
+    restart: always
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  # 6. Grafana (Dashboard giám sát tự động nạp sẵn)
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: drivethru_grafana
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  grafanadata:
