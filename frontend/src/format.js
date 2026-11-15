@@ -2,3 +2,20 @@ const vnd = new Intl.NumberFormat('vi-VN')
 
 /** 45000 -> "45.000 ₫" */
 export const formatPrice = (amount) => `${vnd.format(amount)} ₫`
+
+
+/** Tên hiển thị của trạng thái đơn */
+export const STATUS_LABEL = {
+  PENDING_PAYMENT: 'Chờ thanh toán',
+  CONFIRMED: 'Đã xác nhận',
+  PREPARING: 'Đang chuẩn bị',
+  READY: 'Sẵn sàng nhận',
+  ARRIVED: 'Khách đã đến',
+  COMPLETED: 'Hoàn thành',
+  CANCELLED: 'Đã hủy',
+}
+
+export const METHOD_LABEL = {
+  VNPAY: 'VNPay',
+  CASH: 'Trả tại quầy',
+}

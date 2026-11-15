@@ -49,7 +49,7 @@ AUTH_REGISTRATIONS_TOTAL = Counter(
 
 
 def seed_default_accounts():
-    """Tự động tạo sẵn các tài khoản mẫu (Admin, Nhân viên, Khách hàng) để demo và xem ngay trong TablePlus."""
+    """Tự động tạo sẵn các tài khoản mẫu (ADMIN, Nhân viên, Khách hàng) để demo và xem ngay trong TablePlus."""
     db = SessionLocal()
     try:
         samples = [
@@ -58,7 +58,7 @@ def seed_default_accounts():
                 "password": "Password123",
                 "full_name": "Quản Trị Viên Hệ Thống",
                 "phone": "0901111111",
-                "role": "admin",
+                "role": "ADMIN",
                 "station_id": None,
             },
             {
@@ -66,7 +66,7 @@ def seed_default_accounts():
                 "password": "Password123",
                 "full_name": "Trần Văn Bếp (CN Quận 1)",
                 "phone": "0902222222",
-                "role": "staff",
+                "role": "STAFF",
                 "station_id": 1,
             },
             {
@@ -74,7 +74,7 @@ def seed_default_accounts():
                 "password": "Password123",
                 "full_name": "Lê Thị Thu Ngân (CN Quận 7)",
                 "phone": "0903333333",
-                "role": "staff",
+                "role": "STAFF",
                 "station_id": 2,
             },
             {
@@ -82,7 +82,7 @@ def seed_default_accounts():
                 "password": "Password123",
                 "full_name": "Nguyễn Hữu Tân (Khách Hàng)",
                 "phone": "0909999999",
-                "role": "customer",
+                "role": "CUSTOMER",
                 "station_id": None,
             },
         ]
@@ -155,7 +155,7 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
         hashed_password=hash_password(req.password),
         full_name=req.full_name,
         phone=req.phone,
-        role="customer",
+        role="CUSTOMER",
         station_id=None,
     )
     db.add(new_user)
@@ -281,18 +281,18 @@ def get_me(
     "/api/auth/staff",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
-    tags=["Staff Management (Admin)"],
-    summary="[Admin] Tạo tài khoản nhân viên gán theo cửa hàng (station)",
+    tags=["STAFF Management (ADMIN)"],
+    summary="[ADMIN] Tạo tài khoản nhân viên gán theo cửa hàng (station)",
 )
 def create_staff(
     req: CreateStaffRequest,
     current_payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_payload.get("role") != "admin":
+    if current_payload.get("role") != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ Quản trị viên (Admin) mới có quyền tạo tài khoản nhân viên.",
+            detail="Chỉ Quản trị viên (ADMIN) mới có quyền tạo tài khoản nhân viên.",
         )
 
     if db.query(User).filter(User.email == req.email).first():
@@ -306,7 +306,7 @@ def create_staff(
         hashed_password=hash_password(req.password),
         full_name=req.full_name,
         phone=req.phone,
-        role="staff",
+        role="STAFF",
         station_id=req.station_id,
     )
     db.add(new_staff)
@@ -318,35 +318,35 @@ def create_staff(
 @app.get(
     "/api/auth/staff",
     response_model=List[UserResponse],
-    tags=["Staff Management (Admin)"],
-    summary="[Admin] Lấy danh sách toàn bộ nhân viên",
+    tags=["STAFF Management (ADMIN)"],
+    summary="[ADMIN] Lấy danh sách toàn bộ nhân viên",
 )
 def list_staff(
     current_payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_payload.get("role") != "admin":
+    if current_payload.get("role") != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ Admin mới được xem danh sách nhân viên.",
+            detail="Chỉ ADMIN mới được xem danh sách nhân viên.",
         )
-    return db.query(User).filter(User.role == "staff").order_by(User.id.asc()).all()
+    return db.query(User).filter(User.role == "STAFF").order_by(User.id.asc()).all()
 
 
 @app.patch(
     "/api/auth/staff/{staff_id}/toggle-active",
     response_model=UserResponse,
-    tags=["Staff Management (Admin)"],
-    summary="[Admin] Khóa hoặc mở khóa tài khoản nhân viên",
+    tags=["STAFF Management (ADMIN)"],
+    summary="[ADMIN] Khóa hoặc mở khóa tài khoản nhân viên",
 )
 def toggle_staff_status(
     staff_id: int,
     current_payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Chỉ Admin mới có quyền thực hiện.")
-    staff = db.query(User).filter(User.id == staff_id, User.role == "staff").first()
+    if current_payload.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Chỉ ADMIN mới có quyền thực hiện.")
+    staff = db.query(User).filter(User.id == staff_id, User.role == "STAFF").first()
     if not staff:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên.")
     staff.is_active = not staff.is_active

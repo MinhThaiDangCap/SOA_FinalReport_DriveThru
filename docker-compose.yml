@@ -29,8 +29,8 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       AUTH_DB: auth_db
-      JWT_SECRET: super_secret_jwt_key_drivethru_2026
-      INTERNAL_KEY: change_me_internal_key
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
       BOT_USERNAME: ${BOT_USERNAME:-DriveThruSOABot}
     ports:
       - "8001:8000"
@@ -49,17 +49,116 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       FEEDBACK_DB: feedback_db
-      JWT_SECRET: super_secret_jwt_key_drivethru_2026
-      INTERNAL_KEY: change_me_internal_key
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
       SERVICE_API_KEY: ${SERVICE_API_KEY:-my-secret-key}
       ORDER_SERVICE_URL: http://order-service:8000
       NOTIFICATION_SERVICE_URL: http://notification-service:8000
-      ORDER_SERVICE_FALLBACK: "true"
+      ORDER_SERVICE_FALLBACK: "false"
+    ports:
+      - "8005:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Menu Service (Cửa hàng, Danh mục, Món ăn)
+  menu-service:
+    build: ./services/menu-service
+    container_name: drivethru_menu
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      MENU_DB: menu_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
     ports:
       - "8002:8000"
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Order Service (Đặt đơn, hàng đợi, trạng thái đơn)
+  order-service:
+    build: ./services/order-service
+    container_name: drivethru_order
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      ORDER_DB: order_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+      MENU_SERVICE_URL: http://menu-service:8000
+      MENU_MOCK: "false"
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      menu-service:
+        condition: service_started
+
+  # Payment Service (VNPay, tiền mặt)
+  payment-service:
+    build: ./services/payment-service
+    container_name: drivethru_payment
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      PAYMENT_DB: payment_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+      ORDER_SERVICE_URL: http://order-service:8000
+      PAYMENT_MOCK_MODE: ${PAYMENT_MOCK_MODE:-false}
+      VNP_PROCESS_ON_RETURN: ${VNP_PROCESS_ON_RETURN:-false}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8004}
+      VNP_TMN_CODE: ${VNP_TMN_CODE:-}
+      VNP_HASH_SECRET: ${VNP_HASH_SECRET:-}
+      VNP_URL: ${VNP_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      VNP_RETURN_URL: ${VNP_RETURN_URL:-http://localhost:5173/payment/result}
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+
+  # Gateway: giao diện web + định tuyến API
+  gateway:
+    build: ./frontend
+    container_name: drivethru_gateway
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - auth-service
+      - menu-service
+      - order-service
+      - payment-service
+      - feedback-service
+
+  # Đường hầm ra Internet (chỉ bật khi cần demo/IPN: --profile tunnel)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: drivethru_ngrok
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: ["http", "gateway:80"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+    depends_on:
+      - gateway
 
   # 4. Notification Service (Gửi thông báo & khảo sát Telegram)
   notification-service:
@@ -67,10 +166,11 @@ services:
     container_name: drivethru_notification
     restart: always
     env_file:
-      - ./telegram-bot/Telegam/SOA_Seminar/.env
+      - path: ./telegram-bot/Telegam/SOA_Seminar/.env
+        required: false
     environment:
       SERVICE_API_KEY: ${SERVICE_API_KEY:-my-secret-key}
-      INTERNAL_KEY: change_me_internal_key
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
     ports:
       - "8006:8000"
 

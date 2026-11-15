@@ -2,7 +2,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DB_USER = os.getenv("POSTGRES_USER", "admin")
+DB_USER = os.getenv("POSTGRES_USER", "ADMIN")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "secretpassword")
 DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
 DB_PORT = os.getenv("POSTGRES_PORT", "5432")

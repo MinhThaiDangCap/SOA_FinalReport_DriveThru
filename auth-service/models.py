@@ -4,7 +4,7 @@ from database import Base
 
 
 class User(Base):
-    """Bảng lưu thông tin tài khoản Khách hàng, Nhân viên và Admin"""
+    """Bảng lưu thông tin tài khoản Khách hàng, Nhân viên và ADMIN"""
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)

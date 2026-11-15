@@ -3,8 +3,9 @@ import axios from 'axios'
 // Đường dẫn tương đối: chạy được cả với Vite proxy (dev) lẫn Nginx/ngrok (demo).
 const client = axios.create({ baseURL: '/api', timeout: 8000 })
 
-// Tên khóa localStorage dùng chung cho cả app; trang đăng nhập (auth) sẽ ghi vào đây.
+// Tên khóa localStorage dùng chung cho cả app.
 export const TOKEN_KEY = 'access_token'
+export const USER_KEY = 'drive_thru_user'
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
@@ -12,10 +13,28 @@ client.interceptors.request.use((config) => {
   return config
 })
 
+// Token hết hạn hoặc không hợp lệ: xóa phiên đăng nhập và về trang đăng nhập.
+// Bỏ qua chính API đăng nhập (sai mật khẩu cũng trả 401).
+client.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const url = error?.config?.url || ''
+    const hadToken = !!localStorage.getItem(TOKEN_KEY)
+    if (error?.response?.status === 401 && hadToken && !url.includes('/auth/login')) {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem(USER_KEY)
+      window.location.assign('/login')
+    }
+    return Promise.reject(error)
+  },
+)
+
 /** Lấy thông báo lỗi để hiển thị. Mọi service trả lỗi dạng {"detail": "..."}. */
 export function errorMessage(error) {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string') return detail
+  if (error?.response?.status === 422) return 'Thông tin chưa hợp lệ, vui lòng kiểm tra lại.'
   if (error?.code === 'ECONNABORTED') return 'Máy chủ phản hồi quá lâu, vui lòng thử lại.'
   if (!error?.response) return 'Không kết nối được máy chủ.'
   return 'Đã có lỗi xảy ra, vui lòng thử lại.'
