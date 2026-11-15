@@ -87,13 +87,13 @@ def create_order(
     # 3. Mã giảm giá
     discount, coupon_code = apply_coupon(db, payload.coupon_code, subtotal)
 
-    # 4. Trả tại quầy vào thẳng CONFIRMED, VNPay phải chờ thanh toán
+    # 4. Trả tại quầy vào thẳng CONFIRMED, MoMo phải chờ thanh toán
     if payload.payment_method == "CASH":
         status = OrderStatus.CONFIRMED.value
         note = "Khách chọn trả tại quầy"
     else:
         status = OrderStatus.PENDING_PAYMENT.value
-        note = "Chờ thanh toán VNPay"
+        note = "Chờ thanh toán MoMo"
 
     order = Order(
         customer_id=user["id"],
