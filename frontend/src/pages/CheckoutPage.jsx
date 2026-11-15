@@ -12,7 +12,7 @@ export default function CheckoutPage() {
   const navigate = useNavigate()
   const [plate, setPlate] = useState('')
   const [coupon, setCoupon] = useState('')
-  const [method, setMethod] = useState('VNPAY')
+  const [method, setMethod] = useState('MOMO')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [placed, setPlaced] = useState(false)
@@ -123,16 +123,16 @@ export default function CheckoutPage() {
 
         <fieldset className="option-group">
           <legend>Hình thức thanh toán</legend>
-          <label className={`option ${method === 'VNPAY' ? 'option-on' : ''}`}>
+          <label className={`option ${method === 'MOMO' ? 'option-on' : ''}`}>
             <input
               type="radio"
               name="method"
-              value="VNPAY"
-              checked={method === 'VNPAY'}
-              onChange={() => setMethod('VNPAY')}
+              value="MOMO"
+              checked={method === 'MOMO'}
+              onChange={() => setMethod('MOMO')}
             />
             <span>
-              <strong>Thanh toán online (VNPay)</strong>
+              <strong>Thanh toán online (MoMo)</strong>
               <small>Thanh toán ngay để đơn được xác nhận</small>
             </span>
           </label>
@@ -152,7 +152,7 @@ export default function CheckoutPage() {
         </fieldset>
 
         <button type="submit" className="btn btn-block" disabled={busy}>
-          {busy ? 'Đang xử lý...' : method === 'VNPAY' ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
+          {busy ? 'Đang xử lý...' : method === 'MOMO' ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
         </button>
       </form>
     </div>

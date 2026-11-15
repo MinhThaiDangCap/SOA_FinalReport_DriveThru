@@ -27,7 +27,7 @@ class Order(Base):
     status: Mapped[str] = mapped_column(
         String(20), default=OrderStatus.PENDING_PAYMENT.value, index=True
     )
-    payment_method: Mapped[str] = mapped_column(String(10))  # VNPAY | CASH
+    payment_method: Mapped[str] = mapped_column(String(10))  # MOMO | CASH
     subtotal: Mapped[int] = mapped_column(default=0)          # VND, số nguyên
     discount_amount: Mapped[int] = mapped_column(default=0)
     total_amount: Mapped[int] = mapped_column(default=0)

@@ -54,7 +54,7 @@ export default function OrderPage() {
     )
   }
 
-  const needsPayment = order.status === 'PENDING_PAYMENT' && order.payment_method === 'VNPAY'
+  const needsPayment = order.status === 'PENDING_PAYMENT' && order.payment_method === 'MOMO'
 
   return (
     <div className="checkout order-detail">

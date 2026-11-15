@@ -21,13 +21,20 @@ INTERNAL_KEY = os.environ["INTERNAL_KEY"]
 
 ORDER_SERVICE_URL = os.getenv("ORDER_SERVICE_URL", "http://127.0.0.1:8003")
 
-VNP_TMN_CODE = os.getenv("VNP_TMN_CODE", "")
-VNP_HASH_SECRET = os.getenv("VNP_HASH_SECRET", "")
-VNP_URL = os.getenv("VNP_URL", "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html")
-VNP_RETURN_URL = os.getenv("VNP_RETURN_URL", "http://localhost:5173/payment/result")
-
-# true = thanh toán giả, không gọi VNPay thật
+# true = thanh toán giả, không gọi MoMo thật
 MOCK_MODE = os.getenv("PAYMENT_MOCK_MODE", "false").lower() == "true"
-# true = trang return cũng xử lý kết quả (dùng khi VNPay chưa gọi được IPN vào máy local)
-PROCESS_ON_RETURN = os.getenv("VNP_PROCESS_ON_RETURN", "false").lower() == "true"
+# Địa chỉ công khai của payment-service (MoMo gọi IPN vào đây; chạy local thì cần ngrok)
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://127.0.0.1:8004")
+
+# Mặc định là bộ key test công khai của MoMo sandbox (ai cũng dùng được, không có tiền thật)
+MOMO_PARTNER_CODE = os.getenv("MOMO_PARTNER_CODE") or "MOMO"
+MOMO_ACCESS_KEY = os.getenv("MOMO_ACCESS_KEY") or "F8BBA842ECF85"
+MOMO_SECRET_KEY = os.getenv("MOMO_SECRET_KEY") or "K951B6PE1waDMi640xX08PD3vg6EkVlz"
+MOMO_ENDPOINT = (os.getenv("MOMO_ENDPOINT") or "https://test-payment.momo.vn").rstrip("/")
+# payWithMethod = khách chọn ví/ATM/thẻ trên trang MoMo; captureWallet = chỉ quét QR bằng ví
+MOMO_REQUEST_TYPE = os.getenv("MOMO_REQUEST_TYPE") or "payWithMethod"
+# Trang kết quả của web, MoMo chuyển khách về đây sau khi thanh toán
+MOMO_REDIRECT_URL = os.getenv("MOMO_REDIRECT_URL") or "http://localhost:5173/payment/result"
+MOMO_IPN_URL = os.getenv("MOMO_IPN_URL") or f"{PUBLIC_BASE_URL}/api/payments/momo/ipn"
+# true = trang kết quả cũng xử lý giao dịch (dùng khi MoMo không gọi được IPN vào máy local)
+PROCESS_ON_RETURN = os.getenv("MOMO_PROCESS_ON_RETURN", "false").lower() == "true"

@@ -10,6 +10,7 @@ import StationsPage from './pages/StationsPage.jsx'
 
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
+import PaymentResultPage from './pages/PaymentResultPage.jsx'
 
 export default function App() {
   const { cart, totalQuantity } = useCart()
@@ -65,6 +66,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/payment/result" element={<PaymentResultPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route

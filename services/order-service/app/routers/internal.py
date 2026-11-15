@@ -29,7 +29,7 @@ def payment_confirmed(
     order = get_order_or_404(db, order_id, lock=True)
 
     if order.status == OrderStatus.PENDING_PAYMENT.value:
-        note = "Thanh toán VNPay thành công"
+        note = "Thanh toán MoMo thành công"
         if payload.transaction_ref:
             note += f" (mã GD: {payload.transaction_ref})"
         change_status(order, OrderStatus.CONFIRMED, None, note)
