@@ -8,3 +8,8 @@ export const mockPay = (txnRef, success = true) =>
   client
     .get('/payments/mock/pay', { params: { txn_ref: txnRef, success } })
     .then((r) => r.data)
+
+
+// search là nguyên chuỗi query VNPay trả về, ví dụ "?vnp_TxnRef=...&vnp_ResponseCode=00"
+export const getVnpayResult = (search) =>
+  client.get(`/payments/vnpay/return${search}`).then((r) => r.data)

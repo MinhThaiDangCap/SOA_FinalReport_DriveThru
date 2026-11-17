@@ -11,6 +11,9 @@ import StationsPage from './pages/StationsPage.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
 
+import OrdersPage from './pages/OrdersPage.jsx'
+import PaymentResultPage from './pages/PaymentResultPage.jsx'
+
 export default function App() {
   const { cart, totalQuantity } = useCart()
   const { user, logout } = useAuth()
@@ -28,6 +31,9 @@ export default function App() {
             <Link to={`/stations/${cart.stationId}`} className="topbar-cart">
               Giỏ hàng <span className="badge">{totalQuantity}</span>
             </Link>
+          )}
+                    {user?.role === 'CUSTOMER' && (
+            <Link to="/orders" className="topbar-link">Đơn của tôi</Link>
           )}
           {user ? (
             <>
@@ -65,6 +71,16 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+                    <Route
+            path="/orders"
+            element={
+              <ProtectedRoute roles={['CUSTOMER']}>
+                <OrdersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/payment/result" element={<PaymentResultPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route
