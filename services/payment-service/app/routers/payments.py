@@ -1,21 +1,25 @@
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import config, order_client, vnpay
+from app import config, momo, order_client
 from app.database import get_db
 from app.models import Payment
-from app.processing import PAYMENTS, process_vnpay_result
+from app.processing import PAYMENTS, process_momo_result
 from app.schemas import CashConfirm, CreatePaymentOut, PaymentCreate, PaymentOut
 from app.security import get_current_user, require_roles
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/payments", tags=["payments"])
+
+# Giới hạn số tiền một giao dịch của MoMo (VND)
+MOMO_MIN_AMOUNT = 1_000
+MOMO_MAX_AMOUNT = 50_000_000
 
 
 # ---------- Hàm dùng chung ----------
@@ -33,21 +37,10 @@ def fetch_order(order_id: int) -> dict:
     return body
 
 
-def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    ip = (
-        forwarded.split(",")[0].strip()
-        if forwarded
-        else (request.client.host if request.client else "127.0.0.1")
-    )
-    return "127.0.0.1" if ":" in ip else ip  # VNPay chỉ nhận IPv4
-
-
-# ---------- Khách: tạo link thanh toán VNPay ----------
-@router.post("/vnpay/create", response_model=CreatePaymentOut, status_code=201)
-def create_vnpay_payment(
+# ---------- Khách: tạo giao dịch MoMo ----------
+@router.post("/momo/create", response_model=CreatePaymentOut, status_code=201)
+def create_momo_payment(
     payload: PaymentCreate,
-    request: Request,
     db: Session = Depends(get_db),
     user: dict = Depends(require_roles("CUSTOMER")),
 ):
@@ -55,7 +48,7 @@ def create_vnpay_payment(
 
     if order["customer_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
-    if order["payment_method"] != "VNPAY":
+    if order["payment_method"] != "MOMO":
         raise HTTPException(status_code=400, detail="Đơn này chọn trả tại quầy")
     if order["status"] != "PENDING_PAYMENT":
         raise HTTPException(
@@ -63,8 +56,11 @@ def create_vnpay_payment(
             detail=f"Đơn đang ở trạng thái {order['status']}, không thể thanh toán",
         )
     amount = order["total_amount"]
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Số tiền thanh toán không hợp lệ")
+    if not MOMO_MIN_AMOUNT <= amount <= MOMO_MAX_AMOUNT:
+        raise HTTPException(
+            status_code=400,
+            detail="MoMo chỉ nhận thanh toán từ 1.000đ đến 50.000.000đ",
+        )
 
     already_paid = db.scalar(
         select(Payment).where(
@@ -78,14 +74,15 @@ def create_vnpay_payment(
     payment = Payment(
         order_id=payload.order_id,
         customer_id=user["id"],
-        method="VNPAY",
+        method="MOMO",
         amount=amount,
         status="PENDING",
         txn_ref=uuid.uuid4().hex,  # tạm, đổi ngay bên dưới
     )
     db.add(payment)
     db.flush()  # để có payment.id
-    payment.txn_ref = f"ORD{payload.order_id}P{payment.id}"
+    # Đuôi ngẫu nhiên: orderId phải là duy nhất trên MoMo, mà key sandbox thì dùng chung
+    payment.txn_ref = f"DT{payload.order_id}P{payment.id}-{uuid.uuid4().hex[:10]}"
 
     if config.MOCK_MODE:
         payment_url = (
@@ -93,23 +90,17 @@ def create_vnpay_payment(
             f"?txn_ref={payment.txn_ref}&success=true"
         )
     else:
-        now = datetime.now(timezone(timedelta(hours=7)))  # VNPay dùng giờ GMT+7
-        params = {
-            "vnp_Version": "2.1.0",
-            "vnp_Command": "pay",
-            "vnp_TmnCode": config.VNP_TMN_CODE,
-            "vnp_Amount": str(amount * 100),
-            "vnp_CurrCode": "VND",
-            "vnp_TxnRef": payment.txn_ref,
-            "vnp_OrderInfo": f"Thanh toan don hang {payload.order_id}",  # không dấu
-            "vnp_OrderType": "other",
-            "vnp_Locale": "vn",
-            "vnp_ReturnUrl": config.VNP_RETURN_URL,
-            "vnp_IpAddr": client_ip(request),
-            "vnp_CreateDate": now.strftime("%Y%m%d%H%M%S"),
-            "vnp_ExpireDate": (now + timedelta(minutes=15)).strftime("%Y%m%d%H%M%S"),
-        }
-        payment_url = vnpay.build_payment_url(params)
+        try:
+            payment_url = momo.create_payment(
+                payment.txn_ref, amount, f"Thanh toan don hang {payload.order_id}"
+            )
+        except momo.MomoError as e:
+            db.rollback()
+            logger.error("Tạo giao dịch MoMo thất bại: %s", e)
+            raise HTTPException(
+                status_code=502,
+                detail="Không tạo được giao dịch MoMo, vui lòng thử lại",
+            )
 
     db.commit()
     return CreatePaymentOut(
@@ -120,29 +111,41 @@ def create_vnpay_payment(
     )
 
 
-# ---------- VNPay gọi về (server-to-server) ----------
-@router.get("/vnpay/ipn")
-def vnpay_ipn(request: Request, db: Session = Depends(get_db)):
+# ---------- MoMo gọi về (server-to-server, POST JSON) ----------
+@router.post("/momo/ipn", status_code=204)
+async def momo_ipn(request: Request, db: Session = Depends(get_db)):
     try:
-        code, message = process_vnpay_result(db, dict(request.query_params))
+        params = await request.json()
+        if not isinstance(params, dict):
+            raise ValueError("body không phải object")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dữ liệu không hợp lệ")
+
+    try:
+        result = process_momo_result(db, params)
     except Exception:
-        logger.exception("Lỗi khi xử lý IPN")
+        logger.exception("Lỗi khi xử lý IPN MoMo")
         db.rollback()
-        code, message = "99", "Unknown error"
-    return {"RspCode": code, "Message": message}  # luôn HTTP 200 theo yêu cầu VNPay
+        result = "retry"
+
+    if result == "retry":
+        raise HTTPException(status_code=503, detail="Tạm thời chưa xử lý được")
+    if result != "ok":
+        logger.warning("IPN MoMo %s: %s", params.get("orderId"), result)
+    return Response(status_code=204)  # MoMo yêu cầu trả 204, không có nội dung
 
 
-# ---------- Khách quay về từ VNPay: web gọi API này để hiển thị kết quả ----------
-@router.get("/vnpay/return")
-def vnpay_return(request: Request, db: Session = Depends(get_db)):
+# ---------- Khách quay về từ MoMo: web gọi API này để hiển thị kết quả ----------
+@router.get("/momo/return")
+def momo_return(request: Request, db: Session = Depends(get_db)):
     params = dict(request.query_params)
-    txn_ref = params.get("vnp_TxnRef", "")
+    txn_ref = params.get("orderId", "")
 
     if not config.MOCK_MODE:
-        if not vnpay.verify(params):
+        if not momo.verify(params):
             raise HTTPException(status_code=400, detail="Chữ ký không hợp lệ")
         if config.PROCESS_ON_RETURN:
-            process_vnpay_result(db, params)  # idempotent, xử lý lại cũng an toàn
+            process_momo_result(db, params)  # idempotent, xử lý lại cũng an toàn
 
     payment = db.scalar(select(Payment).where(Payment.txn_ref == txn_ref))
     if payment is None:
@@ -156,7 +159,7 @@ def vnpay_return(request: Request, db: Session = Depends(get_db)):
         "message": {
             "SUCCESS": "Thanh toán thành công",
             "FAILED": "Thanh toán không thành công",
-            "PENDING": "Đang chờ xác nhận từ VNPay",
+            "PENDING": "Đang chờ xác nhận từ MoMo",
         }[payment.status],
     }
 
@@ -172,16 +175,16 @@ def mock_pay(txn_ref: str, success: bool = True, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
 
     params = {
-        "vnp_TxnRef": txn_ref,
-        "vnp_Amount": str(payment.amount * 100),
-        "vnp_ResponseCode": "00" if success else "24",
-        "vnp_TransactionStatus": "00" if success else "02",
-        "vnp_TransactionNo": f"MOCK{payment.id}",
-        "vnp_BankCode": "MOCK",
+        "orderId": txn_ref,
+        "amount": payment.amount,
+        "resultCode": 0 if success else 1006,
+        "message": "Giao dịch giả lập",
+        "transId": f"MOCK{payment.id}",
+        "payType": "mock",
     }
-    code, message = process_vnpay_result(db, params, skip_signature=True)
+    result = process_momo_result(db, params, skip_signature=True)
     db.refresh(payment)
-    return {"RspCode": code, "Message": message, "payment_status": payment.status}
+    return {"result": result, "payment_status": payment.status}
 
 
 # ---------- Nhân viên: xác nhận đã thu tiền tại quầy ----------
@@ -196,7 +199,7 @@ def confirm_cash(
     if user["role"] == "STAFF" and user["station_id"] != order["station_id"]:
         raise HTTPException(status_code=403, detail="Đơn này thuộc cửa hàng khác")
     if order["payment_method"] != "CASH":
-        raise HTTPException(status_code=400, detail="Đơn này thanh toán qua VNPay")
+        raise HTTPException(status_code=400, detail="Đơn này thanh toán qua MoMo")
     if order["status"] in ("PENDING_PAYMENT", "CANCELLED"):
         raise HTTPException(
             status_code=409,

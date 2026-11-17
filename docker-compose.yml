@@ -103,7 +103,7 @@ services:
       menu-service:
         condition: service_started
 
-  # Payment Service (VNPay, tiền mặt)
+  # Payment Service (MoMo, tiền mặt)
   payment-service:
     build: ./services/payment-service
     container_name: drivethru_payment
@@ -118,12 +118,15 @@ services:
       INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
       ORDER_SERVICE_URL: http://order-service:8000
       PAYMENT_MOCK_MODE: ${PAYMENT_MOCK_MODE:-false}
-      VNP_PROCESS_ON_RETURN: ${VNP_PROCESS_ON_RETURN:-false}
+      MOMO_PROCESS_ON_RETURN: ${MOMO_PROCESS_ON_RETURN:-false}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8004}
-      VNP_TMN_CODE: ${VNP_TMN_CODE:-}
-      VNP_HASH_SECRET: ${VNP_HASH_SECRET:-}
-      VNP_URL: ${VNP_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
-      VNP_RETURN_URL: ${VNP_RETURN_URL:-http://localhost:5173/payment/result}
+      # Để trống = dùng bộ key test công khai của MoMo sandbox (xem app/config.py)
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      MOMO_ENDPOINT: ${MOMO_ENDPOINT:-https://test-payment.momo.vn}
+      MOMO_REDIRECT_URL: ${MOMO_REDIRECT_URL:-http://localhost:5173/payment/result}
+      MOMO_IPN_URL: ${MOMO_IPN_URL:-}
     ports:
       - "8004:8000"
     depends_on:

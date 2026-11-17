@@ -10,6 +10,7 @@ import StationsPage from './pages/StationsPage.jsx'
 
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
+import PaymentResultPage from './pages/PaymentResultPage.jsx'
 
 import OrdersPage from './pages/OrdersPage.jsx'
 import PaymentResultPage from './pages/PaymentResultPage.jsx'

@@ -16,7 +16,7 @@ export const STATUS_LABEL = {
 }
 
 export const METHOD_LABEL = {
-  VNPAY: 'VNPay',
+  MOMO: 'MoMo',
   CASH: 'Trả tại quầy',
 }
 

@@ -1,12 +1,12 @@
-import { createVnpayPayment, mockPay } from './api/payments.js'
+import { createMomoPayment, mockPay } from './api/payments.js'
 
 /**
- * Tạo giao dịch VNPay cho đơn rồi đưa khách đi thanh toán.
+ * Tạo giao dịch MoMo cho đơn rồi đưa khách đi thanh toán.
  * - Chế độ giả lập: gọi API giả, trả về đường dẫn nội bộ để web chuyển tới.
- * - VNPay thật: chuyển trình duyệt sang cổng VNPay, trả về null.
+ * - MoMo thật: chuyển trình duyệt sang trang thanh toán MoMo, trả về null.
  */
 export async function payForOrder(orderId) {
-  const payment = await createVnpayPayment(orderId)
+  const payment = await createMomoPayment(orderId)
 
   if (payment.payment_url.includes('/api/payments/mock/pay')) {
     await mockPay(payment.txn_ref, true)

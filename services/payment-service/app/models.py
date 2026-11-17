@@ -12,12 +12,15 @@ class Payment(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     order_id: Mapped[int] = mapped_column(index=True)      # orders.id bên order_db
     customer_id: Mapped[int] = mapped_column(index=True)   # users.id bên auth_db
-    method: Mapped[str] = mapped_column(String(10))        # VNPAY | CASH
+    method: Mapped[str] = mapped_column(String(10))        # MOMO | CASH
     amount: Mapped[int]                                    # VND
     status: Mapped[str] = mapped_column(String(10), default="PENDING", index=True)
     # PENDING | SUCCESS | FAILED
     txn_ref: Mapped[str] = mapped_column(String(40), unique=True, index=True)
-    vnp_transaction_no: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Mã giao dịch phía MoMo. Giữ tên cột cũ trong DB để không phải tạo lại bảng.
+    transaction_no: Mapped[str | None] = mapped_column(
+        "vnp_transaction_no", String(40), nullable=True
+    )
     bank_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     note: Mapped[str | None] = mapped_column(String(200), nullable=True)
     collected_by: Mapped[int | None] = mapped_column(nullable=True)  # nhân viên thu tiền mặt
@@ -37,7 +40,7 @@ class PaymentCallback(Base):
         ForeignKey("payments.id"), nullable=True, index=True
     )
     txn_ref: Mapped[str] = mapped_column(String(60), index=True)
-    raw_params: Mapped[str] = mapped_column(Text)          # nguyên văn query VNPay gửi
+    raw_params: Mapped[str] = mapped_column(Text)          # nguyên văn dữ liệu MoMo gửi
     signature_valid: Mapped[bool]
     response_code: Mapped[str | None] = mapped_column(String(5), nullable=True)
     received_at: Mapped[datetime] = mapped_column(
