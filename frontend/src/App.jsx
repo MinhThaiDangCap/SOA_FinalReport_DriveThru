@@ -10,8 +10,11 @@ import StationsPage from './pages/StationsPage.jsx'
 
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
+import './dashboard.css'
+import AdminPage from './pages/AdminPage.jsx'
 import OrdersPage from './pages/OrdersPage.jsx'
 import PaymentResultPage from './pages/PaymentResultPage.jsx'
+import StaffPage from './pages/StaffPage.jsx'
 
 export default function App() {
   const { cart, totalQuantity } = useCart()
@@ -26,13 +29,19 @@ export default function App() {
         </Link>
 
         <nav className="topbar-nav">
-          {cart.stationId && totalQuantity > 0 && (
+          {(!user || user.role === 'CUSTOMER') && cart.stationId && totalQuantity > 0 && (
             <Link to={`/stations/${cart.stationId}`} className="topbar-cart">
               Giỏ hàng <span className="badge">{totalQuantity}</span>
             </Link>
           )}
           {user?.role === 'CUSTOMER' && (
             <Link to="/orders" className="topbar-link">Đơn của tôi</Link>
+          )}
+          {user?.role === 'STAFF' && (
+            <Link to="/staff" className="topbar-link">Màn hình quầy</Link>
+          )}
+          {user?.role === 'ADMIN' && (
+            <Link to="/admin" className="topbar-link">Quản trị</Link>
           )}
           {user ? (
             <>
@@ -75,6 +84,22 @@ export default function App() {
             element={
               <ProtectedRoute roles={['CUSTOMER']}>
                 <OrdersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/staff"
+            element={
+              <ProtectedRoute roles={['STAFF']}>
+                <StaffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute roles={['ADMIN']}>
+                <AdminPage />
               </ProtectedRoute>
             }
           />

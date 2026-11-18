@@ -18,9 +18,10 @@ export default function LoginPage() {
     setBusy(true)
     setError('')
     try {
-      await login(email.trim(), password)
-      // Sau này đổi: STAFF về /staff, ADMIN về /admin khi có dashboard
-      navigate(location.state?.from || '/', { replace: true })
+      const user = await login(email.trim(), password)
+      // Nhân viên về màn hình quầy, admin về trang quản trị, khách về trang đang xem dở
+      const home = { STAFF: '/staff', ADMIN: '/admin' }[user?.role]
+      navigate(home || location.state?.from || '/', { replace: true })
     } catch (err) {
       setError(errorMessage(err))
     } finally {

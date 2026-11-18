@@ -23,7 +23,9 @@ export const METHOD_LABEL = {
 
 /** "2026-11-15T14:06:30+00:00" -> "15/11/2026 21:06" (giờ máy người dùng) */
 export function formatDateTime(iso) {
-  const d = new Date(iso)
+  // Một số service (feedback) trả giờ UTC không kèm múi giờ: coi như UTC
+  const text = typeof iso === 'string' && !/(Z|[+-]\d\d:?\d\d)$/.test(iso) ? `${iso}Z` : iso
+  const d = new Date(text)
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 }

@@ -105,3 +105,40 @@ def test_cancel_unpaid_or_cash_order_skips_refund(client, monkeypatch):
     body = {**BODY, "payment_method": "MOMO"}
     oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
     assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200
+
+
+# ---------- Đơn tiền mặt: phải thu tiền rồi mới hoàn thành ----------
+def ready_cash_order(client):
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    for s in ("PREPARING", "READY"):
+        assert client.patch(f"/api/orders/{oid}/status", json={"status": s},
+                            headers=auth(20, "STAFF", 1)).status_code == 200
+    return oid
+
+
+def test_cash_order_needs_payment_before_completed(client, monkeypatch):
+    paid = {"v": False}
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: paid["v"])
+    oid = ready_cash_order(client)
+    r = client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
+    assert r.status_code == 409 and "thu tiền" in r.json()["detail"]
+    paid["v"] = True
+    r = client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
+    assert r.status_code == 200 and r.json()["status"] == "COMPLETED"
+
+
+def test_admin_stats_and_recent(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    oid = ready_cash_order(client)
+    client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
+    client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))  # 1 đơn đang chờ
+
+    assert client.get("/api/orders/stats", headers=auth(20, "STAFF", 1)).status_code == 403
+    stats = client.get("/api/orders/stats", headers=auth(1, "ADMIN")).json()
+    assert stats == [{"station_id": 1, "total_orders": 2, "active_orders": 1, "completed_orders": 1,
+                      "cancelled_orders": 0, "revenue": 90000, "today_orders": stats[0]["today_orders"],
+                      "today_revenue": stats[0]["today_revenue"]}]
+
+    recent = client.get("/api/orders/recent", headers=auth(20, "STAFF", 1)).json()
+    assert [o["id"] for o in recent] == [oid]
+    assert client.get("/api/orders/recent", headers=auth(20, "STAFF", 2)).json() == []

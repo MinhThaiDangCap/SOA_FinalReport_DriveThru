@@ -1,6 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from prometheus_client import Counter
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app import payment_client
@@ -8,9 +10,9 @@ from app.coupons import apply_coupon
 from app.database import get_db
 from app.menu_client import get_menu_items
 from app.models import Order, OrderItem, OrderStatus, OrderStatusHistory
-from app.schemas import OrderCreate, OrderOut, StatusUpdate
+from app.schemas import OrderCreate, OrderOut, StationOrderStats, StatusUpdate
 from app.security import get_current_user, require_roles
-from app.state_machine import change_status
+from app.state_machine import ALLOWED, change_status
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -157,6 +159,71 @@ def station_queue(
     return db.scalars(stmt).all()
 
 
+# ---------- Nhân viên / admin: đơn đã xong gần đây ----------
+@router.get("/recent", response_model=list[OrderOut])
+def recent_orders(
+    station_id: int | None = Query(default=None, description="Chỉ admin dùng"),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+):
+    if user["role"] == "STAFF":
+        station_id = user["station_id"]
+    done = (OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value)
+    stmt = select(Order).where(Order.status.in_(done))
+    if station_id is not None:
+        stmt = stmt.where(Order.station_id == station_id)
+    return db.scalars(stmt.order_by(Order.updated_at.desc(), Order.id.desc()).limit(limit)).all()
+
+
+# ---------- Admin: thống kê theo cửa hàng ----------
+@router.get("/stats", response_model=list[StationOrderStats])
+def order_stats(
+    db: Session = Depends(get_db),
+    _: dict = Depends(require_roles("ADMIN")),
+):
+    # "Hôm nay" tính theo giờ Việt Nam
+    vn = timezone(timedelta(hours=7))
+    today_start = datetime.now(vn).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    S = OrderStatus
+    completed = Order.status == S.COMPLETED.value
+    is_today = Order.created_at >= today_start
+    active = Order.status.in_(QUEUE_STATUSES)
+
+    def count_if(cond):
+        return func.sum(case((cond, 1), else_=0))
+
+    rows = db.execute(
+        select(
+            Order.station_id,
+            func.count(Order.id),
+            count_if(active),
+            count_if(completed),
+            count_if(Order.status == S.CANCELLED.value),
+            func.sum(case((completed, Order.total_amount), else_=0)),
+            count_if(is_today),
+            func.sum(case((completed & is_today, Order.total_amount), else_=0)),
+        )
+        .group_by(Order.station_id)
+        .order_by(Order.station_id)
+    ).all()
+
+    return [
+        StationOrderStats(
+            station_id=r[0],
+            total_orders=r[1],
+            active_orders=r[2] or 0,
+            completed_orders=r[3] or 0,
+            cancelled_orders=r[4] or 0,
+            revenue=r[5] or 0,
+            today_orders=r[6] or 0,
+            today_revenue=r[7] or 0,
+        )
+        for r in rows
+    ]
+
+
 # ---------- Xem chi tiết một đơn ----------
 @router.get("/{order_id}", response_model=OrderOut)
 def get_order(
@@ -182,6 +249,20 @@ def update_status(
 ):
     order = get_order_or_404(db, order_id, lock=True)
     ensure_staff_station(user, order)
+
+    # Đơn trả tại quầy: phải ghi nhận đã thu tiền (payment-service) rồi mới được hoàn thành
+    # (chỉ hỏi khi bước chuyển hợp lệ, để lỗi sai trạng thái vẫn trả 409 như cũ)
+    if (
+        payload.status == OrderStatus.COMPLETED.value
+        and OrderStatus.COMPLETED in ALLOWED[OrderStatus(order.status)]
+        and order.payment_method == "CASH"
+        and not payment_client.is_paid(order.id)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Đơn trả tại quầy chưa được xác nhận thu tiền, không thể hoàn thành",
+        )
+
     change_status(order, OrderStatus(payload.status), user["id"], payload.note)
     db.commit()
     db.refresh(order)

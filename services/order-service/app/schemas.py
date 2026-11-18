@@ -73,6 +73,17 @@ class StatusUpdate(BaseModel):
     note: str | None = Field(default=None, max_length=200)
 
 
+class StationOrderStats(BaseModel):
+    station_id: int
+    total_orders: int
+    active_orders: int        # đang trong hàng đợi
+    completed_orders: int
+    cancelled_orders: int
+    revenue: int              # tổng tiền các đơn đã hoàn thành (VND)
+    today_orders: int
+    today_revenue: int
+
+
 class InternalOrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

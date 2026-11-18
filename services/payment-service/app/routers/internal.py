@@ -19,6 +19,15 @@ router = APIRouter(
 )
 
 
+# ---------- order-service hỏi đơn đã được thanh toán chưa ----------
+@router.get("/order/{order_id}/paid")
+def order_paid(order_id: int, db: Session = Depends(get_db)):
+    paid = db.scalar(
+        select(Payment).where(Payment.order_id == order_id, Payment.status == "SUCCESS")
+    )
+    return {"paid": paid is not None, "method": paid.method if paid else None}
+
+
 # ---------- order-service gọi khi khách hủy đơn đã trả tiền qua MoMo ----------
 @router.post("/order/{order_id}/refund")
 def refund_order(order_id: int, db: Session = Depends(get_db)):
