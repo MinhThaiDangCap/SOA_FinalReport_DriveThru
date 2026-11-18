@@ -9,10 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.models import Category, MenuItem, Station, StationItemAvailability
 
+# Tên thương hiệu của chuỗi cửa hàng (mô hình kinh doanh là drive-thru)
+BRAND = "GoLane"
+OLD_BRAND = "Drive-Thru"
+
 STATIONS = [
-    ("Drive-Thru Quận 7", "19 Nguyễn Hữu Thọ, P. Tân Phong, Quận 7, TP.HCM", "06:00 - 23:00"),
-    ("Drive-Thru Thủ Đức", "720A Xa lộ Hà Nội, TP. Thủ Đức, TP.HCM", "06:00 - 22:00"),
-    ("Drive-Thru Bình Thạnh", "208 Điện Biên Phủ, Quận Bình Thạnh, TP.HCM", "24/7"),
+    (f"{BRAND} Quận 7", "19 Nguyễn Hữu Thọ, P. Tân Phong, Quận 7, TP.HCM", "06:00 - 23:00"),
+    (f"{BRAND} Thủ Đức", "720A Xa lộ Hà Nội, TP. Thủ Đức, TP.HCM", "06:00 - 22:00"),
+    (f"{BRAND} Bình Thạnh", "208 Điện Biên Phủ, Quận Bình Thạnh, TP.HCM", "24/7"),
 ]
 
 CATEGORIES = ["Burger", "Gà rán", "Món ăn kèm", "Đồ uống", "Tráng miệng"]
@@ -39,6 +43,17 @@ ITEMS = [
 
 # (station_id, item_id) đang hết hàng — để có sẵn trạng thái "hết" khi demo
 SOLD_OUT = [(1, 4), (2, 15)]
+
+
+def rename_old_brand(db: Session) -> int:
+    """Database tạo trước khi đổi tên: "Drive-Thru Quận 7" -> "GoLane Quận 7". Trả về số cửa hàng đã đổi."""
+    changed = 0
+    for station in db.scalars(select(Station).where(Station.name.like(f"{OLD_BRAND} %"))):
+        station.name = BRAND + station.name[len(OLD_BRAND):]
+        changed += 1
+    if changed:
+        db.commit()
+    return changed
 
 
 def seed_if_empty(db: Session) -> bool:

@@ -1,6 +1,6 @@
-# Drive-Thru Ordering System
+# GoLane – Drive-Thru Ordering System
 
-Hệ thống đặt món trước cho cửa hàng Drive-Thru, xây dựng theo **kiến trúc Microservices** (đồ án môn Kiến trúc hướng dịch vụ).
+Hệ thống đặt món trước cho **GoLane**, chuỗi cửa hàng đồ ăn nhanh theo mô hình drive-thru (giả lập một doanh nghiệp), xây dựng theo **kiến trúc Microservices** (đồ án môn Kiến trúc hướng dịch vụ).
 
 Khách chọn cửa hàng, đặt món và thanh toán online (MoMo) hoặc trả tại quầy, sau đó lái xe tới nhận món. Nhân viên cập nhật trạng thái đơn, khách đánh giá sau khi nhận món, admin theo dõi hệ thống qua Grafana.
 

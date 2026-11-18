@@ -6,7 +6,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app import config, models  # noqa: F401
 from app.database import Base, SessionLocal, engine
 from app.routers import catalog, internal, stations
-from app.seed import seed_if_empty
+from app.seed import rename_old_brand, seed_if_empty
 
 
 @asynccontextmanager
@@ -15,6 +15,7 @@ async def lifespan(app: FastAPI):
     if config.SEED_DATA:
         with SessionLocal() as db:
             seed_if_empty(db)
+            rename_old_brand(db)
     yield
 
 

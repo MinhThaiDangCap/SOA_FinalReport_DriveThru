@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { errorMessage } from '../api/client.js'
 import { getAllStations } from '../api/menu.js'
@@ -39,8 +39,12 @@ export default function AdminPage() {
   const [tab, setTab] = useState('overview')
   const [stations, setStations] = useState(null)
   const [error, setError] = useState('')
-  const [orderStation, setOrderStation] = useState('')
   const [reviewStation, setReviewStation] = useState('')
+  // useMemo: giữ nguyên object giữa các lần render, để màn hình đơn không tải lại liên tục
+  const names = useMemo(
+    () => (stations ? Object.fromEntries(stations.map((s) => [s.id, s.name])) : null),
+    [stations],
+  )
 
   const loadStations = useCallback(() => {
     getAllStations()
@@ -63,8 +67,6 @@ export default function AdminPage() {
   }
   if (!stations) return <div className="state">Đang tải...</div>
 
-  const names = Object.fromEntries(stations.map((s) => [s.id, s.name]))
-
   return (
     <div className="dash">
       <header className="dash-head">
@@ -72,9 +74,6 @@ export default function AdminPage() {
           <p className="dash-eyebrow">Quản trị hệ thống</p>
           <h1>{TABS.find((t) => t.key === tab)?.label}</h1>
         </div>
-        {tab === 'orders' && (
-          <StationPicker stations={stations} value={orderStation} onChange={setOrderStation} allowAll />
-        )}
         {tab === 'reviews' && (
           <StationPicker stations={stations} value={reviewStation} onChange={setReviewStation} />
         )}
@@ -94,7 +93,7 @@ export default function AdminPage() {
       </nav>
 
       {tab === 'overview' && <OverviewTab stations={stations} />}
-      {tab === 'orders' && <OrderBoard stationId={orderStation || undefined} stationNames={names} />}
+      {tab === 'orders' && <OrderBoard stationNames={names} />}
       {tab === 'stations' && <StationsTab stations={stations} onChanged={loadStations} />}
       {tab === 'menu' && <MenuTab />}
       {tab === 'staff' && <StaffTab stations={stations} />}

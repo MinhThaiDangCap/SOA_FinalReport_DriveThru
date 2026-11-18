@@ -1,0 +1,241 @@
+/* ========== Nút chuông thông báo (màn hình quầy / admin) ========== */
+.bell-wrap {
+  position: relative;
+}
+
+.bell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bell-btn:hover {
+  border-color: var(--brand);
+}
+
+.bell-unread {
+  border-color: var(--brand);
+  color: var(--brand-dark);
+}
+
+/* Có xe đang chờ chưa đọc: nút đỏ hẳn để dễ thấy */
+.bell-urgent {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.bell-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+}
+
+.bell-urgent .bell-count {
+  background: #fff;
+  color: var(--brand-dark);
+}
+
+.bell-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: min(380px, calc(100vw - 32px));
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(35, 32, 28, 0.18);
+  color: var(--ink);
+}
+
+.bell-panel-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.bell-panel-actions {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.bell-empty {
+  margin: 0;
+  padding: 18px 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+}
+
+.bell-list {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+
+.bell-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bell-item:hover {
+  background: var(--bg);
+}
+
+.bell-item-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #eef2f7;
+  color: #334155;
+}
+
+.bell-arrived .bell-item-icon {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.bell-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+
+.bell-item-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bell-item:not(.bell-item-unread) {
+  opacity: 0.62;
+}
+
+.bell-item-unread .bell-item-text strong::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  vertical-align: 1px;
+}
+
+.bar-arrived {
+  color: var(--brand-dark);
+}
+
+/* ========== Admin: lọc theo cửa hàng ========== */
+.station-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.station-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.station-chip:hover {
+  border-color: var(--ink);
+}
+
+.station-chip.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.chip-car {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12px;
+}
+
+/* Tên cửa hàng ở đầu thẻ đơn (chỉ admin) */
+.station-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  padding: 2px 9px;
+  border-radius: 6px;
+  background: #f1ece5;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ticket-flash {
+  animation: ticket-flash 1.6s ease-out;
+}
+
+@keyframes ticket-flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 4px rgba(200, 55, 29, 0.45);
+  }
+  100% {
+    box-shadow: var(--shadow);
+  }
+}
+
+@media (max-width: 640px) {
+  .bell-label {
+    display: none;
+  }
+}

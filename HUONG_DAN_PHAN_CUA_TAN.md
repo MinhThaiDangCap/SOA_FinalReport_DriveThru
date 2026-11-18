@@ -37,9 +37,9 @@ Container PostgreSQL (`drivethru_postgres`) đã chạy và tạo sẵn đủ 5 
 | Vai trò | Email | Mật khẩu | Trạm (`station_id`) |
 | :--- | :--- | :--- | :---: |
 | **Admin** | `admin@drivethru.vn` | `Password123` | `NULL` (Toàn hệ thống) |
-| **Nhân viên Trạm 1** | `staff1@drivethru.vn` | `Password123` | `1` (Drive-Thru Quận 7) |
-| **Nhân viên Trạm 2** | `staff2@drivethru.vn` | `Password123` | `2` (Drive-Thru Thủ Đức) |
-| **Nhân viên Trạm 3** | `staff3@drivethru.vn` | `Password123` | `3` (Drive-Thru Bình Thạnh) |
+| **Nhân viên Trạm 1** | `staff1@drivethru.vn` | `Password123` | `1` (GoLane Quận 7) |
+| **Nhân viên Trạm 2** | `staff2@drivethru.vn` | `Password123` | `2` (GoLane Thủ Đức) |
+| **Nhân viên Trạm 3** | `staff3@drivethru.vn` | `Password123` | `3` (GoLane Bình Thạnh) |
 | **Khách hàng** | `khachhang@drivethru.vn` | `Password123` | `NULL` |
 
 ---

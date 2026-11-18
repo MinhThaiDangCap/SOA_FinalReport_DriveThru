@@ -15,6 +15,7 @@ import './dashboard.css'
 import './home.css'
 import './icons.css'
 import './modal.css'
+import './board.css'
 import AdminPage from './pages/AdminPage.jsx'
 import OrdersPage from './pages/OrdersPage.jsx'
 import PaymentResultPage from './pages/PaymentResultPage.jsx'
@@ -31,7 +32,7 @@ export default function App() {
           <span className="brand-mark" aria-hidden="true">
             <Icon name="car" size={20} strokeWidth={2} />
           </span>
-          Drive-Thru
+          GoLane
         </Link>
 
         <nav className="topbar-nav">

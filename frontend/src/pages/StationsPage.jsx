@@ -174,7 +174,7 @@ export default function StationsPage() {
 
       <section className="hero hero-home">
         <div>
-          <p className="dash-eyebrow">Drive-Thru · Đặt trước, không cần xuống xe</p>
+          <p className="dash-eyebrow">GoLane · Đặt trước, không cần xuống xe</p>
           <h1>Đặt trước, lái xe qua, nhận món</h1>
           <p>
             Chọn cửa hàng bạn sẽ ghé, đặt món và thanh toán ngay trên web. Tới nơi chỉ cần bấm

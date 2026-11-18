@@ -67,7 +67,7 @@ def seed_default_accounts():
                 "full_name": "Trần Văn Bếp (CN Quận 7)",
                 "phone": "0902222222",
                 "role": "STAFF",
-                "station_id": 1,  # Drive-Thru Quận 7 (xem menu-service/app/seed.py)
+                "station_id": 1,  # GoLane Quận 7 (xem menu-service/app/seed.py)
             },
             {
                 "email": "staff2@drivethru.vn",
@@ -75,7 +75,7 @@ def seed_default_accounts():
                 "full_name": "Lê Thị Thu Ngân (CN Thủ Đức)",
                 "phone": "0903333333",
                 "role": "STAFF",
-                "station_id": 2,  # Drive-Thru Thủ Đức
+                "station_id": 2,  # GoLane Thủ Đức
             },
             {
                 "email": "staff3@drivethru.vn",
@@ -83,7 +83,7 @@ def seed_default_accounts():
                 "full_name": "Phạm Minh Khoa (CN Bình Thạnh)",
                 "phone": "0904444444",
                 "role": "STAFF",
-                "station_id": 3,  # Drive-Thru Bình Thạnh
+                "station_id": 3,  # GoLane Bình Thạnh
             },
             {
                 "email": "khachhang@drivethru.vn",
@@ -130,7 +130,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Drive-Thru Auth Service",
+    title="GoLane Auth Service",
     description="Dịch vụ Đăng ký, Đăng nhập, Phân quyền JWT và Liên kết Telegram Bot",
     version="1.0.0",
     lifespan=lifespan,

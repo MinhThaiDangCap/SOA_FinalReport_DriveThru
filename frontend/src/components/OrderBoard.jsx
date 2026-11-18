@@ -5,6 +5,7 @@ import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../ap
 import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Icon from './Icon.jsx'
+import NotificationBell from './NotificationBell.jsx'
 
 const POLL_MS = 5000
 
@@ -140,14 +141,22 @@ function CashDialog({ order, busy, onConfirm, onCancel }) {
   )
 }
 
-function Ticket({ order, stationName, busy, onAction }) {
+function Ticket({ order, stationName, flash, busy, onAction }) {
   const action = nextAction(order)
   const waited = minutesSince(order.created_at)
   const arrived = hasArrived(order)
   const carWait = order.arrived_at ? minutesSince(order.arrived_at) : null
 
   return (
-    <li className={`ticket${arrived ? ' ticket-arrived' : ''}`}>
+    <li
+      id={`ticket-${order.id}`}
+      className={`ticket${arrived ? ' ticket-arrived' : ''}${flash ? ' ticket-flash' : ''}`}
+    >
+      {stationName && (
+        <div className="station-tag">
+          <Icon name="store" size={14} /> {stationName}
+        </div>
+      )}
       <div className="ticket-head">
         <span className="ticket-plate">{order.license_plate}</span>
         <span className="ticket-id">#{order.id}</span>
@@ -159,7 +168,6 @@ function Ticket({ order, stationName, busy, onAction }) {
           {order.status === 'PREPARING' && ' · làm nhanh'}
         </div>
       )}
-      {stationName && <div className="ticket-meta">{stationName}</div>}
       <ul className="ticket-items">
         {order.items.map((i) => (
           <li key={i.menu_item_id}>
@@ -200,31 +208,62 @@ export default function OrderBoard({ stationId, stationNames }) {
   const [busyId, setBusyId] = useState(null)
   const [updatedAt, setUpdatedAt] = useState(null)
   const seen = useRef(null)
-  const [newCount, setNewCount] = useState(0)
   const [cashFor, setCashFor] = useState(null) // { order, action } khi đang mở hộp thu tiền
   const [done, setDone] = useState('')
-  // Thông báo "xe đã tới": mỗi đơn báo đúng một lần, nhân viên tự tắt
+  // Thông báo trong nút chuông: đơn mới và xe đã tới. Mỗi đơn chỉ báo xe tới một lần.
   const announced = useRef(new Set())
-  const [arrivals, setArrivals] = useState([])
+  const [events, setEvents] = useState([])
+  const [filter, setFilter] = useState('') // admin: lọc theo cửa hàng ('' = tất cả)
+  const [flashId, setFlashId] = useState(null)
+
+  const nameOf = useCallback(
+    (id) => (stationNames ? stationNames[id] || `Cửa hàng #${id}` : ''),
+    [stationNames],
+  )
 
   const load = useCallback(async () => {
     try {
-      const [queue, done] = await Promise.all([getQueue(stationId), getRecentOrders(stationId, 10)])
-      // Đếm đơn mới xuất hiện kể từ lần tải trước để báo cho quầy
-      const ids = new Set(queue.map((o) => o.id))
-      if (seen.current) {
-        const fresh = queue.filter((o) => !seen.current.has(o.id)).length
-        if (fresh > 0) setNewCount((n) => n + fresh)
-      }
-      seen.current = ids
+      const [queue, done] = await Promise.all([getQueue(stationId), getRecentOrders(stationId, 30)])
+      const now = new Date()
+      const fresh = []
 
-      // Xe mới báo tới quầy -> thêm thông báo. Đơn đã giao xong thì tự gỡ thông báo.
-      const fresh = queue.filter((o) => hasArrived(o) && !announced.current.has(o.id))
-      fresh.forEach((o) => announced.current.add(o.id))
-      setArrivals((list) => [
-        ...fresh.map((o) => ({ id: o.id, plate: o.license_plate, stationId: o.station_id })),
-        ...list.filter((a) => ids.has(a.id)),
-      ])
+      // Đơn mới xuất hiện kể từ lần tải trước (lần đầu mở màn hình thì không báo)
+      if (seen.current) {
+        queue
+          .filter((o) => !seen.current.has(o.id))
+          .forEach((o) =>
+            fresh.push({
+              key: `new-${o.id}`,
+              type: 'new',
+              orderId: o.id,
+              stationId: o.station_id,
+              title: `Đơn mới #${o.id} · ${o.license_plate}`,
+              detail: [nameOf(o.station_id), METHOD_LABEL[o.payment_method]].filter(Boolean).join(' · '),
+              at: now,
+              read: false,
+            }),
+          )
+      }
+      seen.current = new Set(queue.map((o) => o.id))
+
+      // Xe báo tới quầy (kể cả xe đã chờ sẵn lúc mở màn hình)
+      queue
+        .filter((o) => hasArrived(o) && !announced.current.has(o.id))
+        .forEach((o) => {
+          announced.current.add(o.id)
+          fresh.push({
+            key: `arrived-${o.id}`,
+            type: 'arrived',
+            orderId: o.id,
+            stationId: o.station_id,
+            title: `Xe ${o.license_plate} đã tới quầy`,
+            detail: [`Đơn #${o.id}`, STATUS_LABEL[o.status], nameOf(o.station_id)].filter(Boolean).join(' · '),
+            at: o.arrived_at ? new Date(o.arrived_at) : now,
+            read: false,
+          })
+        })
+
+      if (fresh.length) setEvents((list) => [...fresh.reverse(), ...list].slice(0, 30))
       setOrders(queue)
       setRecent(done)
       setError('')
@@ -232,14 +271,13 @@ export default function OrderBoard({ stationId, stationNames }) {
     } catch (err) {
       setError(errorMessage(err))
     }
-  }, [stationId])
+  }, [stationId, nameOf])
 
   useEffect(() => {
     seen.current = null
     announced.current = new Set()
-    setArrivals([])
+    setEvents([])
     setOrders(null)
-    setNewCount(0)
     load()
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') load()
@@ -272,6 +310,22 @@ export default function OrderBoard({ stationId, stationNames }) {
     else runAction(order, action)
   }
 
+  // Bấm một thông báo: đánh dấu đã đọc, bỏ lọc nếu đơn bị ẩn, cuộn tới thẻ đơn và nháy sáng
+  function pickEvent(ev) {
+    setEvents((list) => list.map((e) => (e.key === ev.key ? { ...e, read: true } : e)))
+    if (filter && filter !== ev.stationId) setFilter('')
+    setTimeout(() => {
+      const el = document.getElementById(`ticket-${ev.orderId}`)
+      if (!el) {
+        setNotice(`Đơn #${ev.orderId} không còn trong hàng đợi (đã giao hoặc đã hủy).`)
+        return
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setFlashId(ev.orderId)
+      setTimeout(() => setFlashId(null), 1600)
+    }, 50)
+  }
+
   if (!orders) {
     return error ? (
       <div className="state">
@@ -283,46 +337,66 @@ export default function OrderBoard({ stationId, stationNames }) {
     )
   }
 
-  const showStation = !stationId && stationNames
+  // Admin xem mọi cửa hàng: có bộ lọc + nhãn màu cửa hàng trên từng thẻ
+  const multiStation = !stationId && !!stationNames
+  const stationIds = multiStation ? Object.keys(stationNames).map(Number) : []
+  const shown = filter ? orders.filter((o) => o.station_id === filter) : orders
+  const shownRecent = (filter ? recent.filter((o) => o.station_id === filter) : recent).slice(0, 10)
+  const arrivedWaiting = shown.filter(hasArrived).length
 
   return (
     <div className="board-wrap">
       <div className="board-bar">
         <span>
-          {orders.length} đơn đang xử lý
+          {shown.length} đơn đang xử lý
+          {arrivedWaiting > 0 && (
+            <strong className="bar-arrived"> · {arrivedWaiting} xe đang chờ ở quầy</strong>
+          )}
           {updatedAt && ` · cập nhật lúc ${updatedAt.toLocaleTimeString('vi-VN')}`}
         </span>
-        {newCount > 0 && (
-          <button type="button" className="new-badge" onClick={() => setNewCount(0)}>
-            <Icon name="bell" size={16} /> +{newCount} đơn mới <Icon name="x" size={14} label="Ẩn thông báo" />
-          </button>
-        )}
+        <NotificationBell
+          items={events}
+          onPick={pickEvent}
+          onReadAll={() => setEvents((list) => list.map((e) => ({ ...e, read: true })))}
+          onClear={() => setEvents([])}
+        />
       </div>
-      {arrivals.length > 0 && (
-        <ul className="arrival-alerts" aria-live="polite">
-          {arrivals.map((a) => {
-            const o = orders.find((x) => x.id === a.id)
-            const stage = o ? STATUS_LABEL[o.status] : ''
+
+      {multiStation && (
+        <div className="station-filter" role="tablist" aria-label="Lọc theo cửa hàng">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!filter}
+            className={`station-chip${!filter ? ' on' : ''}`}
+            onClick={() => setFilter('')}
+          >
+            Tất cả <span className="badge">{orders.length}</span>
+          </button>
+          {stationIds.map((id) => {
+            const count = orders.filter((o) => o.station_id === id).length
+            const waiting = orders.filter((o) => o.station_id === id && hasArrived(o)).length
             return (
-              <li key={a.id} className="arrival-alert">
-                <Icon name="car" size={20} />
-                <span>
-                  <strong>Xe {a.plate} đã tới quầy</strong> · đơn #{a.id}
-                  {stage && ` · ${stage}`}
-                  {showStation && ` · ${stationNames[a.stationId] || `Cửa hàng #${a.stationId}`}`}
-                </span>
-                <button
-                  type="button"
-                  className="arrival-close"
-                  onClick={() => setArrivals((list) => list.filter((x) => x.id !== a.id))}
-                >
-                  <Icon name="x" size={16} label="Ẩn thông báo" />
-                </button>
-              </li>
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={filter === id}
+                className={`station-chip${filter === id ? ' on' : ''}`}
+                onClick={() => setFilter(id)}
+              >
+                {nameOf(id)} <span className="badge">{count}</span>
+                {waiting > 0 && (
+                  <span className="chip-car" title={`${waiting} xe đang chờ`}>
+                    <Icon name="car" size={14} /> {waiting}
+                  </span>
+                )}
+              </button>
             )
           })}
-        </ul>
+        </div>
       )}
+
       {error && <div className="form-error" role="alert">Mất kết nối: {error}</div>}
       {notice && <div className="form-error" role="alert">{notice}</div>}
       {done && (
@@ -342,7 +416,7 @@ export default function OrderBoard({ stationId, stationNames }) {
 
       <div className="board">
         {COLUMNS.map((col) => {
-          const list = orders.filter((o) => col.statuses.includes(o.status)).sort(byPriority)
+          const list = shown.filter((o) => col.statuses.includes(o.status)).sort(byPriority)
           return (
             <section key={col.key} className="board-col">
               <h2>
@@ -356,7 +430,8 @@ export default function OrderBoard({ stationId, stationNames }) {
                     <Ticket
                       key={o.id}
                       order={o}
-                      stationName={showStation ? stationNames[o.station_id] || `Cửa hàng #${o.station_id}` : ''}
+                      stationName={multiStation ? nameOf(o.station_id) : ''}
+                      flash={flashId === o.id}
                       busy={busyId === o.id}
                       onAction={handleAction}
                     />
@@ -368,26 +443,30 @@ export default function OrderBoard({ stationId, stationNames }) {
         })}
       </div>
 
-      {recent.length > 0 && (
+      {shownRecent.length > 0 && (
         <details className="recent">
-          <summary>Đơn đã xong gần đây ({recent.length})</summary>
+          <summary>Đơn đã xong gần đây ({shownRecent.length})</summary>
           <table className="table">
             <thead>
               <tr>
                 <th>Đơn</th>
                 <th>Biển số</th>
-                {showStation && <th>Cửa hàng</th>}
+                {multiStation && <th>Cửa hàng</th>}
                 <th>Trạng thái</th>
                 <th>Tổng</th>
                 <th>Đặt lúc</th>
               </tr>
             </thead>
             <tbody>
-              {recent.map((o) => (
+              {shownRecent.map((o) => (
                 <tr key={o.id}>
                   <td>#{o.id}</td>
                   <td>{o.license_plate}</td>
-                  {showStation && <td>{stationNames[o.station_id] || `#${o.station_id}`}</td>}
+                  {multiStation && (
+                    <td>
+                      {nameOf(o.station_id)}
+                    </td>
+                  )}
                   <td>
                     <span className={`status-pill status-${o.status.toLowerCase()}`}>
                       {STATUS_LABEL[o.status]}

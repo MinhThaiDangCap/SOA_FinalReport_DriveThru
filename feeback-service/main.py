@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Drive-Thru Feedback Service",
+    title="GoLane Feedback Service",
     description="Dịch vụ Đánh giá đơn hàng và Thống kê chất lượng cửa hàng (Web & Telegram Bot)",
     version="1.0.0",
     lifespan=lifespan,
