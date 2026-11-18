@@ -11,13 +11,28 @@ const POLL_MS = 5000
 const COLUMNS = [
   { key: 'new', title: 'Đơn mới', statuses: ['CONFIRMED'] },
   { key: 'cooking', title: 'Đang làm', statuses: ['PREPARING'] },
-  { key: 'pickup', title: 'Chờ giao', statuses: ['ARRIVED', 'READY'] },
+  { key: 'pickup', title: 'Chờ giao', statuses: ['READY', 'ARRIVED'] },
 ]
 
 function minutesSince(iso) {
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return 0
   return Math.max(0, Math.floor((Date.now() - t) / 60000))
+}
+
+/** Xe đã tới quầy chưa (đơn mới dùng arrived_at, đơn cũ dùng status ARRIVED). */
+export function hasArrived(order) {
+  return !!order.arrived_at || order.status === 'ARRIVED'
+}
+
+// Trong mỗi cột: xe đã tới lên đầu (tới trước đứng trước), rồi tới đơn đặt trước
+function byPriority(a, b) {
+  const aa = hasArrived(a)
+  const ba = hasArrived(b)
+  if (aa !== ba) return aa ? -1 : 1
+  const ta = new Date((aa && a.arrived_at) || a.created_at).getTime()
+  const tb = new Date((ba && b.arrived_at) || b.created_at).getTime()
+  return ta - tb
 }
 
 /** Hành động kế tiếp của một đơn: mỗi thẻ chỉ có đúng một nút chính. */
@@ -31,7 +46,7 @@ function nextAction(order) {
     case 'ARRIVED':
       if (order.payment_method === 'CASH') {
         return {
-          label: `Thu ${formatPrice(order.total_amount)} & giao món`,
+          label: `${hasArrived(order) ? 'Giao ngay · ' : ''}Thu ${formatPrice(order.total_amount)}`,
           cash: true,
           run: async () => {
             await confirmCash(order.id)
@@ -39,7 +54,10 @@ function nextAction(order) {
           },
         }
       }
-      return { label: 'Đã giao món', run: () => updateOrderStatus(order.id, 'COMPLETED') }
+      return {
+        label: hasArrived(order) ? 'Giao ngay' : 'Đã giao món',
+        run: () => updateOrderStatus(order.id, 'COMPLETED'),
+      }
     default:
       return null
   }
@@ -125,7 +143,8 @@ function CashDialog({ order, busy, onConfirm, onCancel }) {
 function Ticket({ order, stationName, busy, onAction }) {
   const action = nextAction(order)
   const waited = minutesSince(order.created_at)
-  const arrived = order.status === 'ARRIVED'
+  const arrived = hasArrived(order)
+  const carWait = order.arrived_at ? minutesSince(order.arrived_at) : null
 
   return (
     <li className={`ticket${arrived ? ' ticket-arrived' : ''}`}>
@@ -135,7 +154,9 @@ function Ticket({ order, stationName, busy, onAction }) {
       </div>
       {arrived && (
         <div className="ticket-flag">
-          <Icon name="car" size={18} /> Xe đã tới quầy
+          <Icon name="car" size={18} /> Xe đã tới
+          {carWait !== null && ` · chờ ${carWait} phút`}
+          {order.status === 'PREPARING' && ' · làm nhanh'}
         </div>
       )}
       {stationName && <div className="ticket-meta">{stationName}</div>}
@@ -182,6 +203,9 @@ export default function OrderBoard({ stationId, stationNames }) {
   const [newCount, setNewCount] = useState(0)
   const [cashFor, setCashFor] = useState(null) // { order, action } khi đang mở hộp thu tiền
   const [done, setDone] = useState('')
+  // Thông báo "xe đã tới": mỗi đơn báo đúng một lần, nhân viên tự tắt
+  const announced = useRef(new Set())
+  const [arrivals, setArrivals] = useState([])
 
   const load = useCallback(async () => {
     try {
@@ -193,6 +217,14 @@ export default function OrderBoard({ stationId, stationNames }) {
         if (fresh > 0) setNewCount((n) => n + fresh)
       }
       seen.current = ids
+
+      // Xe mới báo tới quầy -> thêm thông báo. Đơn đã giao xong thì tự gỡ thông báo.
+      const fresh = queue.filter((o) => hasArrived(o) && !announced.current.has(o.id))
+      fresh.forEach((o) => announced.current.add(o.id))
+      setArrivals((list) => [
+        ...fresh.map((o) => ({ id: o.id, plate: o.license_plate, stationId: o.station_id })),
+        ...list.filter((a) => ids.has(a.id)),
+      ])
       setOrders(queue)
       setRecent(done)
       setError('')
@@ -204,6 +236,8 @@ export default function OrderBoard({ stationId, stationNames }) {
 
   useEffect(() => {
     seen.current = null
+    announced.current = new Set()
+    setArrivals([])
     setOrders(null)
     setNewCount(0)
     load()
@@ -264,6 +298,31 @@ export default function OrderBoard({ stationId, stationNames }) {
           </button>
         )}
       </div>
+      {arrivals.length > 0 && (
+        <ul className="arrival-alerts" aria-live="polite">
+          {arrivals.map((a) => {
+            const o = orders.find((x) => x.id === a.id)
+            const stage = o ? STATUS_LABEL[o.status] : ''
+            return (
+              <li key={a.id} className="arrival-alert">
+                <Icon name="car" size={20} />
+                <span>
+                  <strong>Xe {a.plate} đã tới quầy</strong> · đơn #{a.id}
+                  {stage && ` · ${stage}`}
+                  {showStation && ` · ${stationNames[a.stationId] || `Cửa hàng #${a.stationId}`}`}
+                </span>
+                <button
+                  type="button"
+                  className="arrival-close"
+                  onClick={() => setArrivals((list) => list.filter((x) => x.id !== a.id))}
+                >
+                  <Icon name="x" size={16} label="Ẩn thông báo" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
       {error && <div className="form-error" role="alert">Mất kết nối: {error}</div>}
       {notice && <div className="form-error" role="alert">{notice}</div>}
       {done && (
@@ -283,7 +342,7 @@ export default function OrderBoard({ stationId, stationNames }) {
 
       <div className="board">
         {COLUMNS.map((col) => {
-          const list = col.statuses.flatMap((s) => orders.filter((o) => o.status === s))
+          const list = orders.filter((o) => col.statuses.includes(o.status)).sort(byPriority)
           return (
             <section key={col.key} className="board-col">
               <h2>

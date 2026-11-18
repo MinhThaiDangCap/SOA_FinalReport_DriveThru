@@ -66,13 +66,14 @@ class OrderOut(BaseModel):
     discount_amount: int
     total_amount: int
     coupon_code: str | None
+    arrived_at: datetime | None = None  # khách đã báo tới quầy (độc lập với status)
     created_at: datetime
     items: list[OrderItemOut]
     history: list[StatusHistoryOut]
     
 class StatusUpdate(BaseModel):
     # Nhân viên chỉ được đặt 3 trạng thái này.
-    # CONFIRMED do payment-service báo, ARRIVED và CANCELLED do khách.
+    # CONFIRMED do payment-service báo, CANCELLED do khách; khách tới quầy là cờ arrived_at.
     status: Literal["PREPARING", "READY", "COMPLETED"]
     note: str | None = Field(default=None, max_length=200)
 

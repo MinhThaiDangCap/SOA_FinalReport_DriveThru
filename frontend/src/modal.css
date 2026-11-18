@@ -157,6 +157,52 @@
   font-weight: 600;
 }
 
+/* ========== Thông báo xe đã tới (màn hình quầy) ========== */
+.arrival-alerts {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.arrival-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand);
+  border-left-width: 5px;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 15px;
+}
+
+.arrival-alert > span {
+  flex: 1;
+}
+
+.arrival-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.arrival-close:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.ticket-flag .icon {
+  vertical-align: -3px;
+}
+
 /* ========== Trang đơn của khách: tiền mặt ========== */
 .cash-box {
   display: flex;

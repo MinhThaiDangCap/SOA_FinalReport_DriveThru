@@ -12,6 +12,7 @@ class OrderStatus(str, enum.Enum):
     CONFIRMED = "CONFIRMED"
     PREPARING = "PREPARING"
     READY = "READY"
+    # Không còn dùng cho đơn mới (khách đến giờ là cờ arrived_at), giữ lại cho đơn cũ
     ARRIVED = "ARRIVED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
@@ -32,6 +33,10 @@ class Order(Base):
     discount_amount: Mapped[int] = mapped_column(default=0)
     total_amount: Mapped[int] = mapped_column(default=0)
     coupon_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Lúc khách bấm "Tôi đã đến". Tách khỏi status: xe tới sớm không làm đổi tiến độ bếp.
+    arrived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

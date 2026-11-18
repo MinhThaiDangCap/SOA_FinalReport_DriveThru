@@ -202,6 +202,46 @@ def test_late_momo_payment_after_switching_to_cash(client, monkeypatch):
     assert (order["payment_method"], order["status"]) == ("MOMO", "CONFIRMED")
 
 
+# ---------- Khách tới sớm: chỉ ghi giờ đến, không nhảy qua bước bếp ----------
+STAFF1 = auth(20, "STAFF", 1)
+
+
+def set_status(client, oid, status):
+    return client.patch(f"/api/orders/{oid}/status", json={"status": status}, headers=STAFF1)
+
+
+def test_early_arrival_keeps_kitchen_status(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    set_status(client, oid, "PREPARING")
+
+    r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200
+    assert r.json()["status"] == "PREPARING" and r.json()["arrived_at"] is not None
+    assert r.json()["history"][-1]["note"] == "Khách báo đã tới quầy"
+
+    # Bấm lại: không lỗi, không ghi thêm lịch sử
+    again = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER")).json()
+    assert len(again["history"]) == len(r.json()["history"])
+
+    # Món chưa xong thì không giao được, phải qua READY
+    assert set_status(client, oid, "COMPLETED").status_code == 409
+    assert set_status(client, oid, "READY").status_code == 200
+    assert set_status(client, oid, "COMPLETED").status_code == 200
+
+
+def test_arrival_rules(client):
+    momo = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=momo, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 409 and "chưa được thanh toán" in r.json()["detail"]
+
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert client.post(f"/api/orders/{oid}/arrived", headers=auth(11, "CUSTOMER")).status_code == 403
+    r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200 and r.json()["status"] == "CONFIRMED"  # tới trước khi bếp làm
+
+
 def test_cannot_cancel_once_store_started(client):
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
     client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"}, headers=auth(20, "STAFF", 1))

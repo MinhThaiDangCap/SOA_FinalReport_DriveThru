@@ -406,11 +406,39 @@ def customer_arrived(
     db: Session = Depends(get_db),
     user: dict = Depends(require_roles("CUSTOMER")),
 ):
+    """Khách báo đã tới làn nhận món. Chỉ ghi lại giờ đến, KHÔNG đổi tiến độ bếp:
+    xe tới sớm thì quầy biết để ưu tiên, nhưng món vẫn phải "Món đã xong" rồi mới giao."""
     order = get_order_or_404(db, order_id, lock=True)
     if order.customer_id != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
 
-    change_status(order, OrderStatus.ARRIVED, user["id"], "Khách báo đã đến")
+    # Bấm lại nhiều lần vẫn an toàn
+    if order.arrived_at is not None or order.status == OrderStatus.ARRIVED.value:
+        return order
+
+    can_arrive = (
+        OrderStatus.CONFIRMED.value,
+        OrderStatus.PREPARING.value,
+        OrderStatus.READY.value,
+    )
+    if order.status not in can_arrive:
+        reasons = {
+            OrderStatus.PENDING_PAYMENT.value: "Đơn chưa được thanh toán. Hãy thanh toán "
+            "hoặc đổi sang trả tại quầy trước khi báo đã đến.",
+            OrderStatus.COMPLETED.value: "Đơn đã hoàn thành.",
+            OrderStatus.CANCELLED.value: "Đơn đã bị hủy.",
+        }
+        raise HTTPException(status_code=409, detail=reasons.get(order.status, "Không thể báo đã đến"))
+
+    order.arrived_at = datetime.now(timezone.utc)
+    order.history.append(
+        OrderStatusHistory(
+            from_status=order.status,
+            to_status=order.status,
+            changed_by=user["id"],
+            note="Khách báo đã tới quầy",
+        )
+    )
     db.commit()
     db.refresh(order)
     return order

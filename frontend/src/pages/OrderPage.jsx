@@ -19,7 +19,7 @@ const STATUS_HINT = {
   PENDING_PAYMENT: 'Đơn đang chờ thanh toán. Hoàn tất thanh toán để cửa hàng bắt đầu chuẩn bị.',
   CONFIRMED: 'Cửa hàng đã nhận đơn và sẽ sớm chuẩn bị món cho bạn.',
   PREPARING: 'Món của bạn đang được chuẩn bị.',
-  READY: 'Món đã sẵn sàng. Hãy chạy xe tới quầy và bấm "Tôi đã đến".',
+  READY: 'Món đã sẵn sàng. Khi tới làn nhận món, bấm "Tôi đã đến" để nhân viên mang món ra.',
   ARRIVED: 'Cửa hàng đã biết bạn có mặt, nhân viên sẽ giao món ngay.',
   COMPLETED: 'Đơn đã hoàn thành. Cảm ơn bạn!',
   CANCELLED: 'Đơn đã bị hủy.',
@@ -147,7 +147,13 @@ export default function OrderPage() {
 
   const needsPayment = status === 'PENDING_PAYMENT' && order.payment_method === 'MOMO'
   const canCancel = isCustomer && ['PENDING_PAYMENT', 'CONFIRMED'].includes(status)
-  const canArrive = isCustomer && ['PREPARING', 'READY'].includes(status)
+  // Xe tới quầy là cờ riêng (arrived_at): báo được từ lúc quán nhận đơn, không đổi tiến độ bếp
+  const arrived = !!order.arrived_at || status === 'ARRIVED'
+  const canArrive = isCustomer && !arrived && ['CONFIRMED', 'PREPARING', 'READY'].includes(status)
+  const arrivedNote =
+    status === 'READY' || status === 'ARRIVED'
+      ? 'Món đã xong, nhân viên đang mang ra xe cho bạn.'
+      : 'Món đang được chuẩn bị, cửa hàng sẽ ưu tiên đơn của bạn. Vui lòng chờ tại làn nhận món.'
   // Đổi được khi chưa trả tiền và quán chưa làm: MoMo đang chờ trả, hoặc tiền mặt chưa làm món
   const canChangeMethod =
     isCustomer &&
@@ -189,6 +195,19 @@ export default function OrderPage() {
           <div>
             <strong>Đã thanh toán {formatPrice(order.total_amount)} tiền mặt</strong>
             <p>Nhân viên đã xác nhận thu tiền lúc {formatDateTime(cashPaidAt)}.</p>
+          </div>
+        </div>
+      )}
+
+      {arrived && !finished && (
+        <div className="cash-box cash-box-done">
+          <Icon name="car" size={22} />
+          <div>
+            <strong>
+              Cửa hàng đã nhận được thông báo bạn đã tới
+              {order.arrived_at && ` lúc ${formatDateTime(order.arrived_at)}`}
+            </strong>
+            <p>{arrivedNote}</p>
           </div>
         </div>
       )}
@@ -249,7 +268,7 @@ export default function OrderPage() {
           type="button"
           className="btn btn-block order-action"
           onClick={() => runAction(markArrived)}
-          disabled={busy || status === 'ARRIVED'}
+          disabled={busy}
         >
           Tôi đã đến
         </button>
@@ -343,13 +362,17 @@ export default function OrderPage() {
 
       <h2 className="timeline-title">Lịch sử đơn hàng</h2>
       <ul className="timeline">
-        {order.history.map((h, i) => (
-          <li key={i}>
-            <strong>{STATUS_LABEL[h.to_status] || h.to_status}</strong>
-            <span>{formatDateTime(h.changed_at)}</span>
-            {h.note && <small>{h.note}</small>}
-          </li>
-        ))}
+        {order.history.map((h, i) => {
+          // Sự kiện không đổi trạng thái (khách tới quầy, ghi chú thanh toán): lấy ghi chú làm tiêu đề
+          const event = h.from_status === h.to_status && h.note
+          return (
+            <li key={i}>
+              <strong>{event ? h.note : STATUS_LABEL[h.to_status] || h.to_status}</strong>
+              <span>{formatDateTime(h.changed_at)}</span>
+              {!event && h.note && <small>{h.note}</small>}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

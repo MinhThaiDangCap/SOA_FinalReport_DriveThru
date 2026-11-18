@@ -6,12 +6,14 @@ from app.models import Order, OrderStatus, OrderStatusHistory
 S = OrderStatus
 
 # Bảng chuyển trạng thái hợp lệ: từ trạng thái nào được sang trạng thái nào
+# Status chỉ phản ánh tiến độ bếp. Khách tới quầy là cờ riêng (Order.arrived_at),
+# nên món phải qua READY rồi mới giao được, dù xe đã tới từ lúc đang làm.
 ALLOWED: dict[OrderStatus, set[OrderStatus]] = {
     S.PENDING_PAYMENT: {S.CONFIRMED, S.CANCELLED},
     S.CONFIRMED: {S.PREPARING, S.CANCELLED},
-    S.PREPARING: {S.READY, S.ARRIVED},
-    S.READY: {S.ARRIVED, S.COMPLETED},
-    S.ARRIVED: {S.READY, S.COMPLETED},
+    S.PREPARING: {S.READY},
+    S.READY: {S.COMPLETED},
+    S.ARRIVED: {S.READY, S.COMPLETED},  # chỉ còn cho đơn cũ trước khi đổi cách làm
     S.COMPLETED: set(),
     S.CANCELLED: set(),
 }
