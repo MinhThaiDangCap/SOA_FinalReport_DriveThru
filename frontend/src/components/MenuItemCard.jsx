@@ -1,5 +1,6 @@
 import { MAX_QUANTITY } from '../context/CartContext.jsx'
 import { formatPrice } from '../format.js'
+import Icon from './Icon.jsx'
 
 export default function MenuItemCard({ item, quantity, onAdd, onSetQuantity }) {
   const soldOut = !item.available
@@ -10,7 +11,7 @@ export default function MenuItemCard({ item, quantity, onAdd, onSetQuantity }) {
         {item.image_url ? (
           <img src={item.image_url} alt="" loading="lazy" />
         ) : (
-          <span aria-hidden="true">{item.name.charAt(0)}</span>
+          <Icon name="utensils" size={34} strokeWidth={1.5} />
         )}
         {soldOut && <span className="sold-out-tag">Hết hàng</span>}
       </div>

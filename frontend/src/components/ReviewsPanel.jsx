@@ -4,6 +4,7 @@ import { errorMessage } from '../api/client.js'
 import { getStationStats } from '../api/reviews.js'
 import { getStationReviews } from '../api/staff.js'
 import { formatDateTime } from '../format.js'
+import Icon, { StarRow } from './Icon.jsx'
 
 /** Điểm trung bình, phân bổ sao và danh sách đánh giá của một cửa hàng. */
 export default function ReviewsPanel({ stationId }) {
@@ -44,7 +45,7 @@ export default function ReviewsPanel({ stationId }) {
       <div className="review-summary">
         <div className="review-score">
           <strong>{stats.total_reviews ? stats.average_rating.toFixed(1) : '–'}</strong>
-          <span>★ trung bình</span>
+          <StarRow value={Math.round(stats.average_rating)} size={16} />
           <small>{stats.total_reviews} lượt đánh giá</small>
         </div>
         <ul className="review-bars">
@@ -52,7 +53,9 @@ export default function ReviewsPanel({ stationId }) {
             const count = stats.rating_breakdown[n] || 0
             return (
               <li key={n}>
-                <span>{n}★</span>
+                <span className="with-icon">
+                  {n} <Icon name="star" size={13} filled className="star-fill" />
+                </span>
                 <span className="bar">
                   <span style={{ width: `${(count / max) * 100}%` }} />
                 </span>
@@ -85,7 +88,7 @@ export default function ReviewsPanel({ stationId }) {
           {reviews.map((r) => (
             <li key={r.id} className={r.rating <= 2 ? 'review-bad' : ''}>
               <div className="review-list-head">
-                <span className="review-stars">{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span>
+                <StarRow value={r.rating} size={15} />
                 <span className="muted">
                   Đơn #{r.order_id} · {formatDateTime(r.created_at)} · {r.source === 'telegram' ? 'Telegram' : 'Web'}
                 </span>

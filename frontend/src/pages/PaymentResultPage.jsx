@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
 import { getMomoResult } from '../api/payments.js'
+import Icon from '../components/Icon.jsx'
 import { formatPrice } from '../format.js'
 
 export default function PaymentResultPage() {
@@ -66,7 +67,7 @@ export default function PaymentResultPage() {
   return (
     <div className="auth-card pay-result">
       <div className={`pay-icon pay-${tone}`} aria-hidden="true">
-        {tone === 'ok' ? '✓' : tone === 'wait' ? '…' : '✕'}
+        <Icon name={tone === 'ok' ? 'check' : tone === 'wait' ? 'hourglass' : 'x'} size={32} strokeWidth={2.4} />
       </div>
       <h1>{result.message}</h1>
       <p className="auth-sub">

@@ -48,9 +48,8 @@
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 12px;
   background: var(--brand-soft);
-  font-size: 20px;
 }
 
 /* --- Đơn đang xử lý --- */
@@ -115,13 +114,31 @@
   gap: 12px;
 }
 
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-box .icon {
+  position: absolute;
+  left: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
 .stations-filter input[type='search'] {
-  min-width: 240px;
+  min-width: 260px;
   font: inherit;
-  padding: 9px 12px;
+  padding: 9px 12px 9px 36px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
+}
+
+.stations-filter input[type='search']:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
 }
 
 .station-top {
@@ -176,6 +193,8 @@
     grid-template-columns: 1fr;
   }
 
+  .stations-filter,
+  .search-box,
   .stations-filter input[type='search'] {
     min-width: 0;
     width: 100%;

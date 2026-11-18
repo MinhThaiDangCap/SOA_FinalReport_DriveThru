@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../api/client.js'
 import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../api/staff.js'
 import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
+import Icon from './Icon.jsx'
 
 const POLL_MS = 5000
 
@@ -54,7 +55,11 @@ function Ticket({ order, stationName, busy, onAction }) {
         <span className="ticket-plate">{order.license_plate}</span>
         <span className="ticket-id">#{order.id}</span>
       </div>
-      {arrived && <div className="ticket-flag">🚗 Xe đã tới quầy</div>}
+      {arrived && (
+        <div className="ticket-flag">
+          <Icon name="car" size={18} /> Xe đã tới quầy
+        </div>
+      )}
       {stationName && <div className="ticket-meta">{stationName}</div>}
       <ul className="ticket-items">
         {order.items.map((i) => (
@@ -66,7 +71,9 @@ function Ticket({ order, stationName, busy, onAction }) {
       <div className="ticket-meta">
         {METHOD_LABEL[order.payment_method] || order.payment_method} · {formatPrice(order.total_amount)}
         {' · '}
-        <span className={waited >= 15 ? 'ticket-late' : ''}>chờ {waited} phút</span>
+        <span className={`with-icon${waited >= 15 ? ' ticket-late' : ''}`}>
+          <Icon name="clock" size={14} /> chờ {waited} phút
+        </span>
       </div>
       {action && (
         <button
@@ -162,7 +169,7 @@ export default function OrderBoard({ stationId, stationNames }) {
         </span>
         {newCount > 0 && (
           <button type="button" className="new-badge" onClick={() => setNewCount(0)}>
-            +{newCount} đơn mới ✕
+            <Icon name="bell" size={16} /> +{newCount} đơn mới <Icon name="x" size={14} label="Ẩn thông báo" />
           </button>
         )}
       </div>

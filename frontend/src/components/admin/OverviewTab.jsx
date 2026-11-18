@@ -4,6 +4,7 @@ import { getOrderStats } from '../../api/admin.js'
 import { errorMessage } from '../../api/client.js'
 import { getStationStats } from '../../api/reviews.js'
 import { formatPrice } from '../../format.js'
+import Icon from '../Icon.jsx'
 
 /** Tổng quan: doanh thu, số đơn và điểm đánh giá theo từng cửa hàng. */
 export default function OverviewTab({ stations }) {
@@ -86,9 +87,14 @@ export default function OverviewTab({ stations }) {
                   <td>{s?.cancelled_orders ?? 0}</td>
                   <td>{formatPrice(s?.revenue ?? 0)}</td>
                   <td>
-                    {r && r.total_reviews > 0
-                      ? `${r.average_rating.toFixed(1)}★ (${r.total_reviews})`
-                      : '–'}
+                    {r && r.total_reviews > 0 ? (
+                      <span className="with-icon">
+                        <Icon name="star" size={14} filled className="star-fill" />
+                        {r.average_rating.toFixed(1)} <span className="muted">({r.total_reviews})</span>
+                      </span>
+                    ) : (
+                      '–'
+                    )}
                     {r?.negative_reviews?.length > 0 && (
                       <span className="tag-bad"> {r.negative_reviews.length} tiêu cực</span>
                     )}

@@ -8,10 +8,12 @@ import MenuPage from './pages/MenuPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
 import StationsPage from './pages/StationsPage.jsx'
 
+import Icon from './components/Icon.jsx'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
 import './dashboard.css'
 import './home.css'
+import './icons.css'
 import AdminPage from './pages/AdminPage.jsx'
 import OrdersPage from './pages/OrdersPage.jsx'
 import PaymentResultPage from './pages/PaymentResultPage.jsx'
@@ -25,7 +27,9 @@ export default function App() {
     <>
       <header className="topbar">
         <Link to="/" className="brand">
-          <span className="brand-mark" aria-hidden="true">DT</span>
+          <span className="brand-mark" aria-hidden="true">
+            <Icon name="car" size={20} strokeWidth={2} />
+          </span>
           Drive-Thru
         </Link>
 

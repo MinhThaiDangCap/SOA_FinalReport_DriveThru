@@ -11,6 +11,7 @@ import {
   updateItem,
 } from '../../api/menu.js'
 import { formatPrice } from '../../format.js'
+import Icon from '../Icon.jsx'
 
 const EMPTY_ITEM = { category_id: '', name: '', description: '', price: '', image_url: '', is_active: true }
 
@@ -216,7 +217,7 @@ export default function MenuTab() {
             ) : (
               <div className={`admin-row${item.is_active ? '' : ' row-off'}`}>
                 <div className="admin-item">
-                  {item.image_url ? <img src={item.image_url} alt="" /> : <span className="admin-thumb">🍔</span>}
+                  {item.image_url ? <img src={item.image_url} alt="" /> : <span className="admin-thumb"><Icon name="utensils" size={22} /></span>}
                   <div>
                     <strong>{item.name}</strong> · {formatPrice(item.price)}
                     {!item.is_active && <span className="tag-bad"> ngừng bán</span>}

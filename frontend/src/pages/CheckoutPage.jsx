@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
 import { createOrder } from '../api/orders.js'
+import Icon from '../components/Icon.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { formatPrice } from '../format.js'
 import { payForOrder } from '../payment.js'
@@ -77,7 +78,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="checkout">
-      <Link to={`/stations/${cart.stationId}`} className="back-link">← Quay lại menu</Link>
+      <Link to={`/stations/${cart.stationId}`} className="back-link"><Icon name="arrowLeft" size={16} /> Quay lại menu</Link>
       <h1>Xác nhận đơn</h1>
       <p className="checkout-station">Nhận món tại: <strong>{cart.stationName}</strong></p>
 

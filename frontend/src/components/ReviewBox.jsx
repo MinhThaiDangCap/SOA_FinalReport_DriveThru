@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { errorMessage } from '../api/client.js'
 import { createReview, getOrderReview } from '../api/reviews.js'
+import Icon from './Icon.jsx'
 
 function Stars({ value, onChange, readOnly }) {
   return (
@@ -15,7 +16,7 @@ function Stars({ value, onChange, readOnly }) {
           disabled={readOnly}
           aria-label={`${n} sao`}
         >
-          ★
+          <Icon name="star" size={30} filled={n <= value} strokeWidth={1.5} />
         </button>
       ))}
     </div>

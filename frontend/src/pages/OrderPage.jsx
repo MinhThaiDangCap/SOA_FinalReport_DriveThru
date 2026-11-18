@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { errorMessage } from '../api/client.js'
 import { getStations } from '../api/menu.js'
 import { cancelOrder, getOrder, markArrived } from '../api/orders.js'
+import Icon from '../components/Icon.jsx'
 import ReviewBox from '../components/ReviewBox.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
@@ -129,7 +130,7 @@ export default function OrderPage() {
   return (
     <div className="checkout order-detail">
       <Link to={isCustomer ? '/orders' : '/'} className="back-link">
-        ← {isCustomer ? 'Đơn của tôi' : 'Trang chủ'}
+        <Icon name="arrowLeft" size={16} /> {isCustomer ? 'Đơn của tôi' : 'Trang chủ'}
       </Link>
       <h1>Đơn #{order.id}</h1>
       <p className="order-status">
@@ -151,7 +152,7 @@ export default function OrderPage() {
             const now = i === currentIndex && status !== 'COMPLETED'
             return (
               <li key={s} className={done ? 'progress-done' : now ? 'progress-now' : ''}>
-                <span className="progress-dot">{done ? '✓' : i + 1}</span>
+                <span className="progress-dot">{done ? <Icon name="check" size={15} strokeWidth={2.6} /> : i + 1}</span>
                 <span className="progress-label">
                   {s === 'READY' && status === 'ARRIVED' ? 'Khách đã đến' : STATUS_LABEL[s]}
                 </span>

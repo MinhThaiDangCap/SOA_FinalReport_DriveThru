@@ -5,13 +5,14 @@ import { errorMessage } from '../api/client.js'
 import { getStations } from '../api/menu.js'
 import { getMyOrders, getWaitTimes } from '../api/orders.js'
 import { getStationStats } from '../api/reviews.js'
+import Icon from '../components/Icon.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { formatPrice, STATUS_LABEL } from '../format.js'
 
 const STEPS = [
-  { icon: '📍', title: 'Chọn cửa hàng', text: 'Chọn quán gần bạn, xem menu và thời gian chờ.' },
-  { icon: '📱', title: 'Đặt & trả trước', text: 'Thanh toán MoMo hoặc trả tại quầy khi nhận món.' },
-  { icon: '🚗', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến", nhân viên nhận diện biển số và giao món.' },
+  { icon: 'mapPin', title: 'Chọn cửa hàng', text: 'Chọn quán gần bạn, xem menu và thời gian chờ.' },
+  { icon: 'card', title: 'Đặt & trả trước', text: 'Thanh toán MoMo hoặc trả tại quầy khi nhận món.' },
+  { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến", nhân viên nhận diện biển số và giao món.' },
 ]
 
 const ACTIVE = ['PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'ARRIVED']
@@ -62,7 +63,9 @@ function ActiveOrders() {
         ))}
       </ul>
       {orders.length > 3 && (
-        <Link to="/orders" className="active-more">Xem tất cả {orders.length} đơn →</Link>
+        <Link to="/orders" className="active-more">
+          Xem tất cả {orders.length} đơn <Icon name="arrowRight" size={16} />
+        </Link>
       )}
     </section>
   )
@@ -82,20 +85,35 @@ function StationCard({ station, wait, rating }) {
         )}
       </div>
       <p className="station-address">{station.address}</p>
-      {station.opening_hours && <p className="station-hours">🕒 {station.opening_hours}</p>}
+      {station.opening_hours && (
+        <p className="station-hours with-icon">
+          <Icon name="clock" size={16} /> {station.opening_hours}
+        </p>
+      )}
 
       <div className="station-facts">
-        <span title="Ước tính cho đơn đặt bây giờ">
-          ⏱ ~{wait?.estimated_minutes ?? 5} phút
-          <small> · {wait?.queue_count ?? 0} đơn đang chờ</small>
+        <span className="with-icon" title="Ước tính cho đơn đặt bây giờ">
+          <Icon name="timer" size={17} />
+          <span>
+            ~{wait?.estimated_minutes ?? 5} phút
+            <small> · {wait?.queue_count ?? 0} đơn đang chờ</small>
+          </span>
         </span>
-        <span className="station-rating">
-          {rating && rating.total_reviews > 0
-            ? `★ ${rating.average_rating.toFixed(1)} (${rating.total_reviews})`
-            : '☆ Chưa có đánh giá'}
-        </span>
+        {rating && rating.total_reviews > 0 ? (
+          <span className="station-rating with-icon">
+            <Icon name="star" size={16} filled className="star-fill" />
+            {rating.average_rating.toFixed(1)}
+            <small>({rating.total_reviews})</small>
+          </span>
+        ) : (
+          <span className="with-icon muted">
+            <Icon name="star" size={16} className="star-empty" /> Chưa có đánh giá
+          </span>
+        )}
       </div>
-      <span className="station-cta">{open === false ? 'Xem menu (đặt trước) →' : 'Xem menu & đặt món →'}</span>
+      <span className="station-cta">
+        {open === false ? 'Xem menu (đặt trước)' : 'Xem menu & đặt món'} <Icon name="arrowRight" size={17} />
+      </span>
     </Link>
   )
 }
@@ -173,7 +191,9 @@ export default function StationsPage() {
         <ol className="steps">
           {STEPS.map((s, i) => (
             <li key={s.title}>
-              <span className="step-icon" aria-hidden="true">{s.icon}</span>
+              <span className="step-icon">
+                <Icon name={s.icon} size={20} />
+              </span>
               <div>
                 <strong>{i + 1}. {s.title}</strong>
                 <p>{s.text}</p>
@@ -187,13 +207,16 @@ export default function StationsPage() {
         <div className="stations-head">
           <h2>Cửa hàng {stations && <span className="muted">({shown.length})</span>}</h2>
           <div className="stations-filter">
-            <input
+            <label className="search-box">
+              <Icon name="search" size={17} />
+              <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm theo tên hoặc địa chỉ..."
               aria-label="Tìm cửa hàng"
-            />
+              />
+            </label>
             <label className="check">
               <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
               Chỉ quán đang mở

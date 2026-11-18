@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { errorMessage } from '../api/client.js'
 import { getStationMenu } from '../api/menu.js'
 import CartPanel from '../components/CartPanel.jsx'
+import Icon from '../components/Icon.jsx'
 import MenuItemCard from '../components/MenuItemCard.jsx'
 import { useCart } from '../context/CartContext.jsx'
 
@@ -93,11 +94,13 @@ export default function MenuPage() {
   return (
     <div className="menu-layout">
       <div className="menu-main">
-        <Link to="/" className="back-link">← Đổi cửa hàng</Link>
+        <Link to="/" className="back-link"><Icon name="arrowLeft" size={16} /> Đổi cửa hàng</Link>
         <div className="station-header">
           <h1>{menu.station.name}</h1>
-          <p>{menu.station.address}</p>
-          {menu.station.opening_hours && <p>Giờ mở cửa: {menu.station.opening_hours}</p>}
+          <p className="with-icon"><Icon name="mapPin" size={16} /> {menu.station.address}</p>
+          {menu.station.opening_hours && (
+            <p className="with-icon"><Icon name="clock" size={16} /> Giờ mở cửa: {menu.station.opening_hours}</p>
+          )}
         </div>
 
         {menu.categories.length === 0 ? (
