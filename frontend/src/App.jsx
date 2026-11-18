@@ -9,7 +9,7 @@ import RegisterPage from './pages/RegisterPage.jsx'
 import StationsPage from './pages/StationsPage.jsx'
 
 import Icon from './components/Icon.jsx'
-import ProtectedRoute from './components/ProtectedRoute.jsx'
+import ProtectedRoute, { GuestOnlyRoute, homePath } from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
 import './dashboard.css'
 import './home.css'
@@ -26,7 +26,7 @@ export default function App() {
   return (
     <>
       <header className="topbar">
-        <Link to="/" className="brand">
+        <Link to={user ? homePath(user.role) : '/login'} className="brand">
           <span className="brand-mark" aria-hidden="true">
             <Icon name="car" size={20} strokeWidth={2} />
           </span>
@@ -34,7 +34,7 @@ export default function App() {
         </Link>
 
         <nav className="topbar-nav">
-          {(!user || user.role === 'CUSTOMER') && cart.stationId && totalQuantity > 0 && (
+          {user?.role === 'CUSTOMER' && cart.stationId && totalQuantity > 0 && (
             <Link to={`/stations/${cart.stationId}`} className="topbar-cart">
               Giỏ hàng <span className="badge">{totalQuantity}</span>
             </Link>
@@ -66,8 +66,23 @@ export default function App() {
 
       <main className="page">
         <Routes>
-          <Route path="/" element={<StationsPage />} />
-          <Route path="/stations/:stationId" element={<MenuPage />} />
+          {/* Phải đăng nhập trước; staff/admin mở các trang này sẽ được đưa về trang của mình */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute roles={['CUSTOMER']}>
+                <StationsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stations/:stationId"
+            element={
+              <ProtectedRoute roles={['CUSTOMER']}>
+                <MenuPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/checkout"
             element={
@@ -109,14 +124,28 @@ export default function App() {
             }
           />
           <Route path="/payment/result" element={<PaymentResultPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/login"
+            element={
+              <GuestOnlyRoute>
+                <LoginPage />
+              </GuestOnlyRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <GuestOnlyRoute>
+                <RegisterPage />
+              </GuestOnlyRoute>
+            }
+          />
           <Route
             path="*"
             element={
               <div className="state">
                 <p>Không tìm thấy trang.</p>
-                <Link to="/" className="btn">Về trang chọn cửa hàng</Link>
+                <Link to={user ? homePath(user.role) : '/login'} className="btn">Về trang chính</Link>
               </div>
             }
           />

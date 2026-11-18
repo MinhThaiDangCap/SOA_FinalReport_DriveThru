@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
+import { homePath } from '../components/ProtectedRoute.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 
 export default function LoginPage() {
@@ -20,8 +21,8 @@ export default function LoginPage() {
     try {
       const user = await login(email.trim(), password)
       // Nhân viên về màn hình quầy, admin về trang quản trị, khách về trang đang xem dở
-      const home = { STAFF: '/staff', ADMIN: '/admin' }[user?.role]
-      navigate(home || location.state?.from || '/', { replace: true })
+      const from = user?.role === 'CUSTOMER' ? location.state?.from : null
+      navigate(from || homePath(user?.role), { replace: true })
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -32,7 +33,10 @@ export default function LoginPage() {
   return (
     <div className="auth-card">
       <h1>Đăng nhập</h1>
-      <p className="auth-sub">Đăng nhập để đặt món và theo dõi đơn hàng.</p>
+      <p className="auth-sub">
+        Khách hàng đăng nhập để chọn cửa hàng và đặt món. Nhân viên và quản trị viên dùng tài
+        khoản được cấp.
+      </p>
 
       <form className="form" onSubmit={handleSubmit}>
         {error && <div className="form-error" role="alert">{error}</div>}

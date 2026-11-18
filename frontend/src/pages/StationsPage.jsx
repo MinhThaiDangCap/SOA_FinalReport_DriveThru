@@ -6,7 +6,6 @@ import { getStations } from '../api/menu.js'
 import { getMyOrders, getWaitTimes } from '../api/orders.js'
 import { getStationStats } from '../api/reviews.js'
 import Icon from '../components/Icon.jsx'
-import { useAuth } from '../context/AuthContext.jsx'
 import { formatPrice, STATUS_LABEL } from '../format.js'
 
 const STEPS = [
@@ -120,7 +119,6 @@ function StationCard({ station, wait, rating }) {
 }
 
 export default function StationsPage() {
-  const { user } = useAuth()
   const [stations, setStations] = useState(null)
   const [waits, setWaits] = useState({})
   const [ratings, setRatings] = useState({})
@@ -172,7 +170,7 @@ export default function StationsPage() {
 
   return (
     <>
-      {user?.role === 'CUSTOMER' && <ActiveOrders />}
+      <ActiveOrders />
 
       <section className="hero hero-home">
         <div>
@@ -182,12 +180,6 @@ export default function StationsPage() {
             Chọn cửa hàng bạn sẽ ghé, đặt món và thanh toán ngay trên web. Tới nơi chỉ cần bấm
             "Tôi đã đến", món được mang ra tận xe.
           </p>
-          {!user && (
-            <div className="hero-actions">
-              <a href="#stations" className="btn">Chọn cửa hàng</a>
-              <Link to="/register" className="btn btn-ghost">Tạo tài khoản</Link>
-            </div>
-          )}
         </div>
         <ol className="steps">
           {STEPS.map((s, i) => (
