@@ -71,6 +71,17 @@ export function AuthProvider({ children }) {
     }
   }, [logout])
 
+  // Phiên đăng nhập nằm trong localStorage, dùng chung cho mọi tab. Tab khác đăng nhập
+  // tài khoản khác / đăng xuất thì tab này phải đổi theo, nếu không sẽ hiện giao diện
+  // khách nhưng gửi token của staff (-> "Không đủ quyền").
+  useEffect(() => {
+    function onStorage(e) {
+      if (e.key === null || e.key === TOKEN_KEY || e.key === USER_KEY) setUser(readUser())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const value = useMemo(
     () => ({ user, isAuthenticated: !!user, login, register, logout }),
     [user, login, register, logout],
