@@ -85,6 +85,8 @@ export default function OrderPage() {
       setOrder(await action(order.id))
     } catch (err) {
       setNotice(errorMessage(err))
+      // Trạng thái có thể đã đổi (vd. cửa hàng vừa bắt đầu làm): tải lại để ẩn nút không còn dùng được
+      setReloadKey((k) => k + 1)
     } finally {
       setBusy(false)
     }
@@ -220,6 +222,12 @@ export default function OrderPage() {
         >
           Hủy đơn
         </button>
+      )}
+      {canCancel && (
+        <p className="order-hint cancel-hint">
+          Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món
+          {order.payment_method === 'MOMO' && status === 'CONFIRMED' ? ', tiền sẽ được hoàn về ví MoMo.' : '.'}
+        </p>
       )}
 
       {isCustomer && status === 'COMPLETED' && (

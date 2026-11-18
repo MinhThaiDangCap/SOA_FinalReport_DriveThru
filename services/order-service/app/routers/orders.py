@@ -310,11 +310,18 @@ def cancel_order(
     if order.customer_id != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
 
+    # Chỉ hủy được khi cửa hàng CHƯA bắt đầu làm món
     cancellable = (OrderStatus.PENDING_PAYMENT.value, OrderStatus.CONFIRMED.value)
     if order.status not in cancellable:
+        reasons = {
+            OrderStatus.COMPLETED.value: "Đơn đã hoàn thành nên không thể hủy.",
+            OrderStatus.CANCELLED.value: "Đơn này đã được hủy trước đó.",
+        }
         raise HTTPException(
             status_code=409,
-            detail=f"Không thể hủy đơn đang ở trạng thái {order.status}",
+            detail=reasons.get(
+                order.status, "Cửa hàng đã bắt đầu làm món nên không thể hủy đơn nữa."
+            ),
         )
 
     note = "Khách hủy đơn"

@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 import { TOKEN_KEY, USER_KEY } from '../api/client.js'
-import { loginRequest, registerRequest } from '../api/auth.js'
+import { getMe, loginRequest, registerRequest } from '../api/auth.js'
 
 const REFRESH_KEY = 'refresh_token'
 
@@ -47,6 +47,29 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(USER_KEY)
     setUser(null)
   }, [])
+
+  // Mỗi lần mở web: lấy lại thông tin mới nhất từ auth-service, vì bản lưu trong
+  // trình duyệt có thể đã cũ (admin đổi tên, đổi cửa hàng, khóa tài khoản...).
+  useEffect(() => {
+    if (!localStorage.getItem(TOKEN_KEY)) return
+    let cancelled = false
+    getMe()
+      .then((fresh) => {
+        if (cancelled) return
+        const cached = readUser()
+        // Vai trò / cửa hàng nằm trong token: đổi thì phải đăng nhập lại để có token mới
+        if (!fresh.is_active || (cached && (cached.role !== fresh.role || cached.station_id !== fresh.station_id))) {
+          logout()
+          return
+        }
+        localStorage.setItem(USER_KEY, JSON.stringify(fresh))
+        setUser(fresh)
+      })
+      .catch(() => {}) // 401 đã được client.js xử lý (đưa về trang đăng nhập)
+    return () => {
+      cancelled = true
+    }
+  }, [logout])
 
   const value = useMemo(
     () => ({ user, isAuthenticated: !!user, login, register, logout }),

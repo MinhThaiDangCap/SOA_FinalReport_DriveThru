@@ -150,3 +150,11 @@ def test_wait_times_public(client):
     r = client.get("/api/orders/wait-times")  # không cần token
     assert r.status_code == 200
     assert r.json() == [{"station_id": 1, "queue_count": 3, "estimated_minutes": 9}]
+
+
+def test_cannot_cancel_once_store_started(client):
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"}, headers=auth(20, "STAFF", 1))
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "Cửa hàng đã bắt đầu làm món nên không thể hủy đơn nữa."

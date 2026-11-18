@@ -62,8 +62,19 @@
 }
 
 .active-orders h2 {
-  margin-bottom: 10px;
   font-size: 1.05rem;
+}
+
+.active-hint {
+  margin: 2px 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.cancel-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
 }
 
 .active-orders ul {

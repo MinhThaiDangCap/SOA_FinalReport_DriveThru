@@ -47,7 +47,8 @@ function ActiveOrders() {
 
   return (
     <section className="active-orders">
-      <h2>Đơn đang xử lý</h2>
+      <h2>Đơn của bạn đang tiến hành</h2>
+      <p className="active-hint">Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món.</p>
       <ul>
         {orders.slice(0, 3).map((o) => (
           <li key={o.id}>
