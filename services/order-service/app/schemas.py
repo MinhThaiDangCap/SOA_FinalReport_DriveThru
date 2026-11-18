@@ -29,6 +29,10 @@ class OrderCreate(BaseModel):
         return v or None
 
 
+class PaymentMethodUpdate(BaseModel):
+    payment_method: Literal["MOMO", "CASH"]
+
+
 # ---------- Response ----------
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

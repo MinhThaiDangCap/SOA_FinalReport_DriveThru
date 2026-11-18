@@ -13,6 +13,7 @@ from app.models import Order, OrderItem, OrderStatus, OrderStatusHistory
 from app.schemas import (
     OrderCreate,
     OrderOut,
+    PaymentMethodUpdate,
     StationOrderStats,
     StationWaitTime,
     StatusUpdate,
@@ -333,6 +334,66 @@ def cancel_order(
             note = f"Khách hủy đơn, đã hoàn {amount}đ về ví MoMo"
 
     change_status(order, OrderStatus.CANCELLED, user["id"], note)
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+# ---------- Khách: đổi phương thức thanh toán ----------
+@router.patch("/{order_id}/payment-method", response_model=OrderOut)
+def change_payment_method(
+    order_id: int,
+    payload: PaymentMethodUpdate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("CUSTOMER")),
+):
+    """Chỉ đổi được khi đơn CHƯA trả tiền và cửa hàng CHƯA bắt đầu làm món.
+
+    MOMO -> CASH: đơn đang chờ thanh toán -> vào thẳng hàng đợi của quầy (CONFIRMED).
+    CASH -> MOMO: đơn quay về chờ thanh toán, quầy chỉ làm khi MoMo báo đã trả.
+    """
+    order = get_order_or_404(db, order_id, lock=True)
+    if order.customer_id != user["id"]:
+        raise HTTPException(status_code=403, detail="Không đủ quyền")
+
+    new_method = payload.payment_method
+    if order.payment_method == new_method:
+        return order  # không đổi gì
+
+    expected = (
+        OrderStatus.PENDING_PAYMENT.value
+        if order.payment_method == "MOMO"
+        else OrderStatus.CONFIRMED.value
+    )
+    if order.status != expected:
+        raise HTTPException(
+            status_code=409,
+            detail="Đơn đã được thanh toán hoặc cửa hàng đã bắt đầu làm món, "
+            "không thể đổi phương thức thanh toán nữa.",
+        )
+    # Hỏi payment-service: tránh trường hợp MoMo vừa báo đã trả mà đơn chưa kịp cập nhật
+    if payment_client.is_paid(order.id):
+        raise HTTPException(
+            status_code=409,
+            detail="Đơn đã được thanh toán, không thể đổi phương thức thanh toán.",
+        )
+
+    old_status = order.status
+    if new_method == "CASH":
+        new_status = OrderStatus.CONFIRMED.value
+        note = "Khách đổi sang trả tại quầy"
+    else:
+        new_status = OrderStatus.PENDING_PAYMENT.value
+        note = "Khách đổi sang thanh toán MoMo"
+
+    order.payment_method = new_method
+    order.status = new_status
+    # Ghi thẳng lịch sử (CONFIRMED -> PENDING_PAYMENT không nằm trong luồng thường)
+    order.history.append(
+        OrderStatusHistory(
+            from_status=old_status, to_status=new_status, changed_by=user["id"], note=note
+        )
+    )
     db.commit()
     db.refresh(order)
     return order

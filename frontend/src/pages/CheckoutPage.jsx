@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
@@ -8,10 +8,25 @@ import { useCart } from '../context/CartContext.jsx'
 import { formatPrice } from '../format.js'
 import { payForOrder } from '../payment.js'
 
+// Biển số VN: 2 số tỉnh + 1-2 chữ cái (+ 1 số với xe máy) + 4-5 số. Bỏ qua dấu cách, "-" và ".".
+// Ví dụ hợp lệ: 51A-12345, 51A 123.45, 30LD-1234, 59X1-123.45
+const PLATE_RE = /^\d{2}[A-Z]{1,2}\d?\d{4,5}$/
+
+export function validatePlate(value) {
+  const v = value.trim()
+  if (!v) return 'Vui lòng nhập biển số xe để nhân viên nhận ra xe của bạn khi tới quầy.'
+  if (!PLATE_RE.test(v.toUpperCase().replace(/[\s.-]/g, ''))) {
+    return 'Biển số xe chưa đúng định dạng. Ví dụ: 51A-12345 hoặc 59X1-123.45.'
+  }
+  return ''
+}
+
 export default function CheckoutPage() {
   const { cart, subtotal, clear } = useCart()
   const navigate = useNavigate()
+  const plateRef = useRef(null)
   const [plate, setPlate] = useState('')
+  const [plateTouched, setPlateTouched] = useState(false)
   const [coupon, setCoupon] = useState('')
   const [method, setMethod] = useState('MOMO')
   const [error, setError] = useState('')
@@ -21,6 +36,12 @@ export default function CheckoutPage() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    const plateError = validatePlate(plate)
+    setPlateTouched(true)
+    if (plateError) {
+      plateRef.current?.focus()
+      return
+    }
     setBusy(true)
 
     let order
@@ -58,6 +79,8 @@ export default function CheckoutPage() {
       })
     }
   }
+
+  const plateMessage = plateTouched ? validatePlate(plate) : ''
 
   if (placed) {
     return (
@@ -98,19 +121,31 @@ export default function CheckoutPage() {
         Mã giảm giá (nếu có) sẽ được áp dụng khi đặt đơn. Giá cuối cùng do hệ thống tính.
       </p>
 
-      <form className="form checkout-form" onSubmit={handleSubmit}>
+      <form className="form checkout-form" onSubmit={handleSubmit} noValidate>
         {error && <div className="form-error" role="alert">{error}</div>}
 
-        <label className="field">
-          Biển số xe
+        <label className={`field${plateMessage ? ' field-invalid' : ''}`}>
+          Biển số xe <span className="field-required">*</span>
           <input
+            ref={plateRef}
             value={plate}
             onChange={(e) => setPlate(e.target.value)}
+            onBlur={() => plate.trim() && setPlateTouched(true)}
             placeholder="Ví dụ: 51A-12345"
-            minLength={4}
             maxLength={15}
-            required
+            autoComplete="off"
+            aria-invalid={!!plateMessage}
+            aria-describedby="plate-msg"
           />
+          {plateMessage ? (
+            <span id="plate-msg" className="field-error" role="alert">
+              {plateMessage}
+            </span>
+          ) : (
+            <span id="plate-msg" className="field-help">
+              Nhân viên dùng biển số để nhận ra xe của bạn khi tới quầy.
+            </span>
+          )}
         </label>
 
         <label className="field">

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { errorMessage } from '../api/client.js'
 import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../api/staff.js'
 import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
+import ConfirmDialog from './ConfirmDialog.jsx'
 import Icon from './Icon.jsx'
 
 const POLL_MS = 5000
@@ -31,7 +32,7 @@ function nextAction(order) {
       if (order.payment_method === 'CASH') {
         return {
           label: `Thu ${formatPrice(order.total_amount)} & giao món`,
-          confirm: `Xác nhận đã thu ${formatPrice(order.total_amount)} tiền mặt của xe ${order.license_plate}?`,
+          cash: true,
           run: async () => {
             await confirmCash(order.id)
             return updateOrderStatus(order.id, 'COMPLETED', 'Đã thu tiền mặt và giao món')
@@ -42,6 +43,83 @@ function nextAction(order) {
     default:
       return null
   }
+}
+
+// Mệnh giá hay gặp để bấm nhanh số tiền khách đưa
+const NOTES = [50000, 100000, 200000, 500000]
+
+/** Hộp xác nhận thu tiền mặt: xem lại đơn, nhập tiền khách đưa để tính tiền thối. */
+function CashDialog({ order, busy, onConfirm, onCancel }) {
+  const total = order.total_amount
+  const [given, setGiven] = useState('')
+  const givenNum = Number(given.replace(/\D/g, '')) || 0
+  const short = givenNum > 0 && givenNum < total
+  const quick = [total, ...NOTES.filter((n) => n > total)].slice(0, 4)
+
+  return (
+    <ConfirmDialog
+      title="Xác nhận thu tiền mặt"
+      confirmLabel={`Đã thu ${formatPrice(total)} · giao món`}
+      confirmDisabled={short}
+      tone="success"
+      busy={busy}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    >
+      <div className="cash-summary">
+        <div>
+          <span className="muted">Xe</span>
+          <strong className="cash-plate">{order.license_plate}</strong>
+        </div>
+        <div>
+          <span className="muted">Đơn</span>
+          <strong>#{order.id}</strong>
+        </div>
+      </div>
+      <ul className="cash-items">
+        {order.items.map((i) => (
+          <li key={i.menu_item_id}>
+            <span>{i.quantity} × {i.item_name}</span>
+            <span>{formatPrice(i.unit_price * i.quantity)}</span>
+          </li>
+        ))}
+        {order.discount_amount > 0 && (
+          <li className="muted">
+            <span>Giảm giá{order.coupon_code ? ` (${order.coupon_code})` : ''}</span>
+            <span>-{formatPrice(order.discount_amount)}</span>
+          </li>
+        )}
+      </ul>
+      <div className="cash-total">
+        <span>Cần thu</span>
+        <strong>{formatPrice(total)}</strong>
+      </div>
+
+      <label className="field">
+        Khách đưa (không bắt buộc)
+        <input
+          inputMode="numeric"
+          value={givenNum ? givenNum.toLocaleString('vi-VN') : ''}
+          onChange={(e) => setGiven(e.target.value)}
+          placeholder="Nhập số tiền để tính tiền thối"
+        />
+      </label>
+      <div className="cash-quick">
+        {quick.map((n) => (
+          <button key={n} type="button" className="chip" onClick={() => setGiven(String(n))}>
+            {n === total ? 'Vừa đủ' : formatPrice(n)}
+          </button>
+        ))}
+      </div>
+      {givenNum > 0 && (
+        <p className={short ? 'error-text' : 'cash-change'}>
+          {short
+            ? `Còn thiếu ${formatPrice(total - givenNum)}`
+            : `Tiền thối lại cho khách: ${formatPrice(givenNum - total)}`}
+        </p>
+      )}
+    </ConfirmDialog>
+  )
 }
 
 function Ticket({ order, stationName, busy, onAction }) {
@@ -102,6 +180,8 @@ export default function OrderBoard({ stationId, stationNames }) {
   const [updatedAt, setUpdatedAt] = useState(null)
   const seen = useRef(null)
   const [newCount, setNewCount] = useState(0)
+  const [cashFor, setCashFor] = useState(null) // { order, action } khi đang mở hộp thu tiền
+  const [done, setDone] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -133,18 +213,29 @@ export default function OrderBoard({ stationId, stationNames }) {
     return () => clearInterval(timer)
   }, [load])
 
-  async function handleAction(order, action) {
-    if (action.confirm && !window.confirm(action.confirm)) return
+  async function runAction(order, action) {
     setBusyId(order.id)
     setNotice('')
     try {
       await action.run()
+      if (action.cash) {
+        setDone(`Đã thu ${formatPrice(order.total_amount)} của xe ${order.license_plate} (đơn #${order.id}) và giao món.`)
+      }
+      setCashFor(null)
       await load()
     } catch (err) {
       setNotice(`Đơn #${order.id}: ${errorMessage(err)}`)
+      setCashFor(null)
     } finally {
       setBusyId(null)
     }
+  }
+
+  function handleAction(order, action) {
+    setDone('')
+    // Thu tiền mặt: mở hộp xác nhận riêng thay vì bấm là xong
+    if (action.cash) setCashFor({ order, action })
+    else runAction(order, action)
   }
 
   if (!orders) {
@@ -175,6 +266,20 @@ export default function OrderBoard({ stationId, stationNames }) {
       </div>
       {error && <div className="form-error" role="alert">Mất kết nối: {error}</div>}
       {notice && <div className="form-error" role="alert">{notice}</div>}
+      {done && (
+        <div className="form-success" role="status">
+          <Icon name="check" size={18} strokeWidth={2.4} /> {done}
+        </div>
+      )}
+
+      {cashFor && (
+        <CashDialog
+          order={cashFor.order}
+          busy={busyId === cashFor.order.id}
+          onConfirm={() => runAction(cashFor.order, cashFor.action)}
+          onCancel={() => setCashFor(null)}
+        />
+      )}
 
       <div className="board">
         {COLUMNS.map((col) => {
