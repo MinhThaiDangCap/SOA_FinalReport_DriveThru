@@ -3,6 +3,7 @@ from prometheus_client import Counter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import payment_client
 from app.coupons import apply_coupon
 from app.database import get_db
 from app.menu_client import get_menu_items
@@ -205,7 +206,15 @@ def cancel_order(
             detail=f"Không thể hủy đơn đang ở trạng thái {order.status}",
         )
 
-    change_status(order, OrderStatus.CANCELLED, user["id"], "Khách hủy đơn")
+    note = "Khách hủy đơn"
+    # Đơn MoMo đã CONFIRMED tức là đã trả tiền: hoàn tiền trước, thành công mới hủy
+    if order.payment_method == "MOMO" and order.status == OrderStatus.CONFIRMED.value:
+        result = payment_client.refund_order(order.id)
+        if result.get("refunded"):
+            amount = f"{result.get('amount', 0):,}".replace(",", ".")
+            note = f"Khách hủy đơn, đã hoàn {amount}đ về ví MoMo"
+
+    change_status(order, OrderStatus.CANCELLED, user["id"], note)
     db.commit()
     db.refresh(order)
     return order

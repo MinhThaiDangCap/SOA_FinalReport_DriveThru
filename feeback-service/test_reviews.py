@@ -93,3 +93,27 @@ def test_create_review_and_stats():
     assert stats["average_rating"] == 3.5
     assert len(stats["negative_reviews"]) == 1
 
+
+def test_get_order_review_requires_login_and_owner():
+    client.post("/api/reviews", json={"order_id": 2004, "station_id": 1, "rating": 5})
+
+    # Chủ đơn xem được
+    res = client.get("/api/reviews/orders/2004")
+    assert res.status_code == 200 and res.json()["rating"] == 5
+    # Đơn chưa đánh giá -> null
+    assert client.get("/api/reviews/orders/9999").json() is None
+
+    # Khách khác -> 403
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "2", "role": "CUSTOMER"}
+    try:
+        assert client.get("/api/reviews/orders/2004").status_code == 403
+    finally:
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
+    # Không đăng nhập -> 401
+    del app.dependency_overrides[get_current_user]
+    try:
+        assert client.get("/api/reviews/orders/2004").status_code == 401
+    finally:
+        app.dependency_overrides[get_current_user] = override_get_current_user
+

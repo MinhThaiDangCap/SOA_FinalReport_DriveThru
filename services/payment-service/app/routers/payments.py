@@ -160,7 +160,8 @@ def momo_return(request: Request, db: Session = Depends(get_db)):
             "SUCCESS": "Thanh toán thành công",
             "FAILED": "Thanh toán không thành công",
             "PENDING": "Đang chờ xác nhận từ MoMo",
-        }[payment.status],
+            "REFUNDED": "Đơn đã hủy, tiền đã được hoàn về ví MoMo",
+        }.get(payment.status, payment.status),
     }
 
 

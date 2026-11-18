@@ -15,7 +15,7 @@ class Payment(Base):
     method: Mapped[str] = mapped_column(String(10))        # MOMO | CASH
     amount: Mapped[int]                                    # VND
     status: Mapped[str] = mapped_column(String(10), default="PENDING", index=True)
-    # PENDING | SUCCESS | FAILED
+    # PENDING | SUCCESS | FAILED | REFUNDED
     txn_ref: Mapped[str] = mapped_column(String(40), unique=True, index=True)
     # Mã giao dịch phía MoMo. Giữ tên cột cũ trong DB để không phải tạo lại bảng.
     transaction_no: Mapped[str | None] = mapped_column(

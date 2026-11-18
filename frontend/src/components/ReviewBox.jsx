@@ -24,6 +24,8 @@ function Stars({ value, onChange, readOnly }) {
 
 export default function ReviewBox({ orderId, stationId }) {
   const [review, setReview] = useState(undefined) // undefined: đang tải, null: chưa đánh giá
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [error, setError] = useState('')
@@ -31,13 +33,15 @@ export default function ReviewBox({ orderId, stationId }) {
 
   useEffect(() => {
     let cancelled = false
+    setLoadError('')
     getOrderReview(orderId)
       .then((data) => !cancelled && setReview(data))
-      .catch(() => !cancelled && setReview(null))
+      // Lỗi tải khác với "chưa đánh giá": không hiện form, để khách thử lại
+      .catch((err) => !cancelled && setLoadError(errorMessage(err)))
     return () => {
       cancelled = true
     }
-  }, [orderId])
+  }, [orderId, reloadKey])
 
   const needReason = rating === 1 || rating === 2
 
@@ -64,6 +68,17 @@ export default function ReviewBox({ orderId, stationId }) {
     }
   }
 
+  if (loadError) {
+    return (
+      <section className="review-box">
+        <h2>Đánh giá đơn hàng</h2>
+        <p className="form-error" role="alert">Không tải được đánh giá: {loadError}</p>
+        <button type="button" className="btn btn-ghost" onClick={() => setReloadKey((k) => k + 1)}>
+          Thử lại
+        </button>
+      </section>
+    )
+  }
   if (review === undefined) return null
 
   if (review) {

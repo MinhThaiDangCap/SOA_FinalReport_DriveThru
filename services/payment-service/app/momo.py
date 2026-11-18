@@ -59,6 +59,36 @@ def create_payment(txn_ref: str, amount: int, order_info: str) -> str:
     return data["payUrl"]
 
 
+def refund(refund_ref: str, amount: int, trans_id: str, description: str) -> str:
+    """Hoàn tiền một giao dịch đã thành công. Trả về transId của lệnh hoàn tiền.
+
+    refund_ref là orderId MỚI (duy nhất) cho lệnh hoàn, trans_id là mã giao dịch gốc của MoMo.
+    """
+    fields = {
+        "amount": amount,
+        "description": description,
+        "orderId": refund_ref,
+        "partnerCode": config.MOMO_PARTNER_CODE,
+        "requestId": refund_ref,
+        "transId": trans_id,
+    }
+    body = {**fields, "lang": "vi", "signature": _sign(fields)}
+
+    try:
+        resp = httpx.post(
+            f"{config.MOMO_ENDPOINT}/v2/gateway/api/refund", json=body, timeout=30.0
+        )
+        data = resp.json()
+    except (httpx.HTTPError, ValueError) as e:
+        raise MomoError(f"Không gọi được MoMo: {e}")
+
+    if data.get("resultCode") != SUCCESS_CODE:
+        raise MomoError(
+            f"MoMo từ chối hoàn tiền: [{data.get('resultCode')}] {data.get('message')}"
+        )
+    return str(data.get("transId", ""))
+
+
 def verify(params: dict) -> bool:
     """Kiểm tra chữ ký của kết quả MoMo gửi về (IPN hoặc redirect)."""
     given = str(params.get("signature") or "")

@@ -400,8 +400,20 @@ def list_station_reviews(
     tags=["Customer Reviews"],
     summary="Kiểm tra xem một đơn hàng đã có đánh giá chưa",
 )
-def get_order_review(order_id: int, db: Session = Depends(get_db)):
-    return db.query(Review).filter(Review.order_id == order_id).first()
+def get_order_review(
+    order_id: int,
+    db: Session = Depends(get_db),
+    user_payload: dict = Depends(get_current_user),
+):
+    review = db.query(Review).filter(Review.order_id == order_id).first()
+    # Khách chỉ xem được đánh giá của chính mình; nhân viên/admin xem được tất cả
+    is_customer = str(user_payload.get("role", "")).upper() == "CUSTOMER"
+    if review and is_customer and review.customer_id != int(user_payload.get("sub")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không thể xem đánh giá đơn hàng của người khác.",
+        )
+    return review
 
 
 @app.get("/health", tags=["Health"])

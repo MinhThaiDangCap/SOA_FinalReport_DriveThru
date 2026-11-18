@@ -20,6 +20,7 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 INTERNAL_KEY = os.environ["INTERNAL_KEY"]
 
 MENU_SERVICE_URL = os.getenv("MENU_SERVICE_URL", "http://localhost:8002")
+PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://localhost:8004")
 
 # true = không gọi menu-service thật, dùng món giả (để test khi B chưa xong)
 MENU_MOCK = os.getenv("MENU_MOCK", "false").lower() == "true"

@@ -10,8 +10,6 @@ import StationsPage from './pages/StationsPage.jsx'
 
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import OrderPage from './pages/OrderPage.jsx'
-import PaymentResultPage from './pages/PaymentResultPage.jsx'
-
 import OrdersPage from './pages/OrdersPage.jsx'
 import PaymentResultPage from './pages/PaymentResultPage.jsx'
 
@@ -33,7 +31,7 @@ export default function App() {
               Giỏ hàng <span className="badge">{totalQuantity}</span>
             </Link>
           )}
-                    {user?.role === 'CUSTOMER' && (
+          {user?.role === 'CUSTOMER' && (
             <Link to="/orders" className="topbar-link">Đơn của tôi</Link>
           )}
           {user ? (
@@ -56,7 +54,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<StationsPage />} />
           <Route path="/stations/:stationId" element={<MenuPage />} />
-                    <Route
+          <Route
             path="/checkout"
             element={
               <ProtectedRoute roles={['CUSTOMER']}>
@@ -72,8 +70,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-                    <Route
+          <Route
             path="/orders"
             element={
               <ProtectedRoute roles={['CUSTOMER']}>

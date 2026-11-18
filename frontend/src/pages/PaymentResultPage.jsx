@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
-import { getVnpayResult } from '../api/payments.js'
+import { getMomoResult } from '../api/payments.js'
 import { formatPrice } from '../format.js'
 
 export default function PaymentResultPage() {
@@ -18,7 +18,7 @@ export default function PaymentResultPage() {
 
     const check = async () => {
       try {
-        const data = await getVnpayResult(search)
+        const data = await getMomoResult(search)
         if (cancelled) return
         setResult(data)
         if (data.payment_status === 'PENDING' && tries < 5) {

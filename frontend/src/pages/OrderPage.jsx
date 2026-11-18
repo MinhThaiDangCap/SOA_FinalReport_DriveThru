@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { errorMessage } from '../api/client.js'
 import { getStations } from '../api/menu.js'
 import { cancelOrder, getOrder, markArrived } from '../api/orders.js'
+import ReviewBox from '../components/ReviewBox.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
 import { payForOrder } from '../payment.js'
@@ -121,7 +122,7 @@ export default function OrderPage() {
   const currentKey = status === 'ARRIVED' ? 'READY' : status
   const currentIndex = steps.indexOf(currentKey)
 
-  const needsPayment = status === 'PENDING_PAYMENT' && order.payment_method === 'VNPAY'
+  const needsPayment = status === 'PENDING_PAYMENT' && order.payment_method === 'MOMO'
   const canCancel = isCustomer && ['PENDING_PAYMENT', 'CONFIRMED'].includes(status)
   const canArrive = isCustomer && ['PREPARING', 'READY'].includes(status)
 
@@ -206,11 +207,22 @@ export default function OrderPage() {
         <button
           type="button"
           className="btn btn-ghost btn-block order-action"
-          onClick={() => runAction(cancelOrder, 'Bạn chắc chắn muốn hủy đơn này?')}
+          onClick={() =>
+            runAction(
+              cancelOrder,
+              order.payment_method === 'MOMO' && status === 'CONFIRMED'
+                ? 'Bạn chắc chắn muốn hủy đơn này? Tiền sẽ được hoàn về ví MoMo của bạn.'
+                : 'Bạn chắc chắn muốn hủy đơn này?',
+            )
+          }
           disabled={busy}
         >
           Hủy đơn
         </button>
+      )}
+
+      {isCustomer && status === 'COMPLETED' && (
+        <ReviewBox orderId={order.id} stationId={order.station_id} />
       )}
 
       <h2 className="timeline-title">Lịch sử đơn hàng</h2>

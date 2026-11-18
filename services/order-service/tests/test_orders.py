@@ -63,3 +63,45 @@ def test_invalid_transition_returns_409(client):
 def test_customer_cannot_see_other_customers_order(client):
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
     assert client.get(f"/api/orders/{oid}", headers=auth(11, "CUSTOMER")).status_code == 403
+
+# ---------- Hủy đơn MoMo đã trả: phải hoàn tiền trước ----------
+from fastapi import HTTPException
+from app import payment_client
+
+
+def paid_momo_order(client):
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = client.post(f"/internal/orders/{oid}/payment-confirmed",
+                    json={"transaction_ref": "123"}, headers={"X-Internal-Key": "ik"})
+    assert r.status_code == 200 and r.json()["status"] == "CONFIRMED"
+    return oid
+
+
+def test_cancel_paid_momo_order_refunds_first(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(payment_client, "refund_order",
+                        lambda oid: calls.append(oid) or {"refunded": True, "amount": 90000})
+    oid = paid_momo_order(client)
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200 and r.json()["status"] == "CANCELLED"
+    assert calls == [oid]
+    assert r.json()["history"][-1]["note"] == "Khách hủy đơn, đã hoàn 90.000đ về ví MoMo"
+
+
+def test_cancel_kept_when_refund_fails(client, monkeypatch):
+    def fail(oid):
+        raise HTTPException(status_code=502, detail="MoMo chưa hoàn tiền được")
+    monkeypatch.setattr(payment_client, "refund_order", fail)
+    oid = paid_momo_order(client)
+    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 502
+    assert client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()["status"] == "CONFIRMED"
+
+
+def test_cancel_unpaid_or_cash_order_skips_refund(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "refund_order", lambda oid: pytest.fail("không được gọi"))
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200

@@ -180,3 +180,51 @@ def test_return_rejects_tampered_query(ctx):
     params = momo_result(txn, result_code=1006, as_text=True)
     params["resultCode"] = "0"  # khách tự sửa URL thành "thành công"
     assert client.get("/api/payments/momo/return", params=params).status_code == 400
+
+
+# ---------- Hoàn tiền (order-service gọi khi khách hủy đơn đã trả) ----------
+IK = {"X-Internal-Key": "ik"}
+
+
+def paid_order(client):
+    txn = create(client)["txn_ref"]
+    assert client.post("/api/payments/momo/ipn", json=momo_result(txn)).status_code == 204
+    return txn
+
+
+def test_refund_calls_momo_and_is_idempotent(ctx):
+    client, calls = ctx
+    paid_order(client)
+
+    r = client.post("/internal/payments/order/7/refund", headers=IK)
+    assert r.status_code == 200 and r.json() == {"refunded": True, "amount": 45000}
+    url, body = calls["momo"][-1]
+    assert url.endswith("/v2/gateway/api/refund")
+    assert body["transId"] == "4088878653" and body["amount"] == 45000
+    signed = {k: v for k, v in body.items() if k not in ("lang", "signature")}
+    assert body["signature"] == momo._sign(signed)
+    assert status_of(client) == "REFUNDED"
+
+    n = len(calls["momo"])
+    assert client.post("/internal/payments/order/7/refund", headers=IK).json()["refunded"] is True
+    assert len(calls["momo"]) == n  # không hoàn 2 lần
+
+
+def test_refund_without_payment_and_wrong_key(ctx):
+    client, _ = ctx
+    assert client.post("/internal/payments/order/7/refund").status_code == 403
+    r = client.post("/internal/payments/order/7/refund", headers=IK)
+    assert r.json() == {"refunded": False, "amount": 0}
+
+
+def test_refund_rejected_by_momo_keeps_success(ctx, monkeypatch):
+    client, _ = ctx
+    paid_order(client)
+
+    class Refused:
+        def json(self):
+            return {"resultCode": 1001, "message": "Refund failed"}
+
+    monkeypatch.setattr(momo.httpx, "post", lambda *a, **k: Refused())
+    assert client.post("/internal/payments/order/7/refund", headers=IK).status_code == 502
+    assert status_of(client) == "SUCCESS"
