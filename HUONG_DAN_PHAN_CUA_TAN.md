@@ -14,7 +14,7 @@ Tài liệu này tổng hợp toàn bộ phần công việc của **Tân (Ngư�
 | Thành phần | Cổng (Port) | Database sở hữu | Bảng dữ liệu (Xem trên TablePlus) |
 | :--- | :---: | :---: | :--- |
 | **`auth-service`** | `8001` | `auth_db` | `users`, `refresh_tokens` |
-| **`feeback-service`** | `8002` | `feedback_db` | `reviews` |
+| **`feeback-service`** | `8005` | `feedback_db` | `reviews` |
 | **`notification-service`** | `8006` | *(Stateless)* | Gửi thông báo & khảo sát qua Telegram API |
 | **`telegram-bot` (Java)** | *(Polling)* | *(Gọi REST)* | Nhận `/start <token>` và phiếu khảo sát 5 sao |
 | **`prometheus`** | `9090` | *(Time-series)* | Thu thập `/metrics` mỗi 15 giây |
@@ -37,8 +37,9 @@ Container PostgreSQL (`drivethru_postgres`) đã chạy và tạo sẵn đủ 5 
 | Vai trò | Email | Mật khẩu | Trạm (`station_id`) |
 | :--- | :--- | :--- | :---: |
 | **Admin** | `admin@drivethru.vn` | `Password123` | `NULL` (Toàn hệ thống) |
-| **Nhân viên Trạm 1** | `staff1@drivethru.vn` | `Password123` | `1` (CN Quận 1) |
-| **Nhân viên Trạm 2** | `staff2@drivethru.vn` | `Password123` | `2` (CN Quận 7) |
+| **Nhân viên Trạm 1** | `staff1@drivethru.vn` | `Password123` | `1` (Drive-Thru Quận 7) |
+| **Nhân viên Trạm 2** | `staff2@drivethru.vn` | `Password123` | `2` (Drive-Thru Thủ Đức) |
+| **Nhân viên Trạm 3** | `staff3@drivethru.vn` | `Password123` | `3` (Drive-Thru Bình Thạnh) |
 | **Khách hàng** | `khachhang@drivethru.vn` | `Password123` | `NULL` |
 
 ---
@@ -52,7 +53,7 @@ docker compose up -d --build
 ```
 Sau khi chạy xong, mở trình duyệt tại:
 - **Swagger Auth Service**: [http://localhost:8001/docs](http://localhost:8001/docs)
-- **Swagger Feedback Service**: [http://localhost:8002/docs](http://localhost:8002/docs)
+- **Swagger Feedback Service**: [http://localhost:8005/docs](http://localhost:8005/docs)
 - **Swagger Notification Service**: [http://localhost:8006/docs](http://localhost:8006/docs)
 - **Prometheus**: [http://localhost:9090](http://localhost:9090)
 - **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (Đăng nhập: `admin` / `admin` → Vào mục **Dashboards** → Mở **Drive-Thru Microservices & Business Monitoring**)

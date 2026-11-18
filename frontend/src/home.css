@@ -1,0 +1,183 @@
+/* ========== Trang chủ khách hàng ========== */
+.hero-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  padding: 28px 0 32px;
+}
+
+.hero-home p {
+  max-width: 560px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.steps p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.step-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  font-size: 20px;
+}
+
+/* --- Đơn đang xử lý --- */
+.active-orders {
+  margin: 8px 0 4px;
+  padding: 16px;
+  border: 1px solid var(--brand);
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+}
+
+.active-orders h2 {
+  margin-bottom: 10px;
+  font-size: 1.05rem;
+}
+
+.active-orders ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.active-order {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.active-more {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--brand-dark);
+  font-weight: 700;
+}
+
+/* --- Danh sách cửa hàng --- */
+.stations-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.stations-head h2 {
+  font-size: 1.3rem;
+}
+
+.stations-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.stations-filter input[type='search'] {
+  min-width: 240px;
+  font: inherit;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.station-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.open-tag {
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.open-yes {
+  background: #e3f4e8;
+  color: #1d6b3a;
+}
+
+.open-no {
+  background: #eee;
+  color: #666;
+}
+
+.station-closed {
+  opacity: 0.75;
+}
+
+.station-facts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.station-facts small {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+@media (max-width: 860px) {
+  .hero-home {
+    grid-template-columns: 1fr;
+  }
+
+  .stations-filter input[type='search'] {
+    min-width: 0;
+    width: 100%;
+  }
+}

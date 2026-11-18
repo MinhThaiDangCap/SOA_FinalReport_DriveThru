@@ -84,6 +84,12 @@ class StationOrderStats(BaseModel):
     today_revenue: int
 
 
+class StationWaitTime(BaseModel):
+    station_id: int
+    queue_count: int          # số đơn đang chờ làm / chờ giao
+    estimated_minutes: int    # thời gian chờ ước tính cho đơn mới
+
+
 class InternalOrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

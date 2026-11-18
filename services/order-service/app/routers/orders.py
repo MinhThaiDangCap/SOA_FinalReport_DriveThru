@@ -10,7 +10,13 @@ from app.coupons import apply_coupon
 from app.database import get_db
 from app.menu_client import get_menu_items
 from app.models import Order, OrderItem, OrderStatus, OrderStatusHistory
-from app.schemas import OrderCreate, OrderOut, StationOrderStats, StatusUpdate
+from app.schemas import (
+    OrderCreate,
+    OrderOut,
+    StationOrderStats,
+    StationWaitTime,
+    StatusUpdate,
+)
 from app.security import get_current_user, require_roles
 from app.state_machine import ALLOWED, change_status
 
@@ -157,6 +163,30 @@ def station_queue(
         stmt = stmt.where(Order.station_id == station_id)
     stmt = stmt.order_by(Order.id.asc())  # đơn cũ nhất lên đầu
     return db.scalars(stmt).all()
+
+
+# ---------- Công khai: độ đông của từng cửa hàng (trang chủ) ----------
+# Ước tính đơn giản: mỗi đơn đang chờ thêm khoảng 3 phút, tối thiểu 5 phút.
+BASE_WAIT_MINUTES = 5
+MINUTES_PER_ORDER = 3
+
+
+@router.get("/wait-times", response_model=list[StationWaitTime])
+def wait_times(db: Session = Depends(get_db)):
+    """Không cần đăng nhập, chỉ trả số lượng, không lộ thông tin đơn."""
+    rows = db.execute(
+        select(Order.station_id, func.count(Order.id))
+        .where(Order.status.in_(QUEUE_STATUSES))
+        .group_by(Order.station_id)
+    ).all()
+    return [
+        StationWaitTime(
+            station_id=station_id,
+            queue_count=count,
+            estimated_minutes=max(BASE_WAIT_MINUTES, count * MINUTES_PER_ORDER),
+        )
+        for station_id, count in rows
+    ]
 
 
 # ---------- Nhân viên / admin: đơn đã xong gần đây ----------

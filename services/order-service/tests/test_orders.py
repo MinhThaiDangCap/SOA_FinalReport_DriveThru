@@ -142,3 +142,11 @@ def test_admin_stats_and_recent(client, monkeypatch):
     recent = client.get("/api/orders/recent", headers=auth(20, "STAFF", 1)).json()
     assert [o["id"] for o in recent] == [oid]
     assert client.get("/api/orders/recent", headers=auth(20, "STAFF", 2)).json() == []
+
+
+def test_wait_times_public(client):
+    for _ in range(3):
+        client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))
+    r = client.get("/api/orders/wait-times")  # không cần token
+    assert r.status_code == 200
+    assert r.json() == [{"station_id": 1, "queue_count": 3, "estimated_minutes": 9}]

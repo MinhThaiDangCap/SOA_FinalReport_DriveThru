@@ -153,7 +153,7 @@ Các container phải ở trạng thái `Up`, riêng `drivethru_postgres` là `U
 | Prometheus | http://localhost:9090 |
 | Grafana | http://localhost:3000 (`admin` / `admin`) |
 
-**Tài khoản mẫu:** `auth-service` tự tạo sẵn 1 admin, 2 nhân viên (cửa hàng 1 và 2) và 1 khách hàng khi khởi động. Email và mật khẩu xem trong [HUONG_DAN_PHAN_CUA_TAN.md](HUONG_DAN_PHAN_CUA_TAN.md) hoặc hàm `seed_default_accounts` trong [auth-service/main.py](auth-service/main.py). Có thể bấm **Đăng ký** để tạo khách mới.
+**Tài khoản mẫu:** `auth-service` tự tạo sẵn 1 admin, 3 nhân viên (`staff1` Quận 7, `staff2` Thủ Đức, `staff3` Bình Thạnh) và 1 khách hàng khi khởi động. Email và mật khẩu xem trong [HUONG_DAN_PHAN_CUA_TAN.md](HUONG_DAN_PHAN_CUA_TAN.md) hoặc hàm `seed_default_accounts` trong [auth-service/main.py](auth-service/main.py). Có thể bấm **Đăng ký** để tạo khách mới.
 
 **Kịch bản nên thử:**
 1. **Trả tại quầy:** đăng nhập khách → chọn cửa hàng → thêm món → đặt đơn, chọn "Trả tại quầy" → xem tiến trình đơn.

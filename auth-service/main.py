@@ -64,18 +64,26 @@ def seed_default_accounts():
             {
                 "email": "staff1@drivethru.vn",
                 "password": "Password123",
-                "full_name": "Trần Văn Bếp (CN Quận 1)",
+                "full_name": "Trần Văn Bếp (CN Quận 7)",
                 "phone": "0902222222",
                 "role": "STAFF",
-                "station_id": 1,
+                "station_id": 1,  # Drive-Thru Quận 7 (xem menu-service/app/seed.py)
             },
             {
                 "email": "staff2@drivethru.vn",
                 "password": "Password123",
-                "full_name": "Lê Thị Thu Ngân (CN Quận 7)",
+                "full_name": "Lê Thị Thu Ngân (CN Thủ Đức)",
                 "phone": "0903333333",
                 "role": "STAFF",
-                "station_id": 2,
+                "station_id": 2,  # Drive-Thru Thủ Đức
+            },
+            {
+                "email": "staff3@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Phạm Minh Khoa (CN Bình Thạnh)",
+                "phone": "0904444444",
+                "role": "STAFF",
+                "station_id": 3,  # Drive-Thru Bình Thạnh
             },
             {
                 "email": "khachhang@drivethru.vn",
@@ -88,7 +96,11 @@ def seed_default_accounts():
         ]
         for acc in samples:
             exists = db.query(User).filter(User.email == acc["email"]).first()
-            if not exists:
+            if exists:
+                # Đồng bộ tên và cửa hàng của tài khoản mẫu đã tạo từ bản cũ (không đổi mật khẩu)
+                exists.full_name = acc["full_name"]
+                exists.station_id = acc["station_id"]
+            else:
                 user = User(
                     email=acc["email"],
                     hashed_password=hash_password(acc["password"]),
