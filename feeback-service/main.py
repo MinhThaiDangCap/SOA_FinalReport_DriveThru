@@ -59,7 +59,6 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=4,
                     comment="Burger bò phô mai nóng hổi, khoai tây giòn.",
-                    source="web",
                 ),
                 Review(
                     order_id=1003,
@@ -74,7 +73,6 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=1,
                     comment="Giao thiếu 1 gói tương ớt và khăn giấy dù đã ghi chú.",
-                    source="web",
                 ),
                 Review(
                     order_id=1005,
@@ -82,7 +80,6 @@ def seed_sample_reviews():
                     station_id=2,
                     rating=5,
                     comment="Chi nhánh rộng rãi, bấm Tôi đã đến là 30 giây sau có nhân viên mang ra.",
-                    source="web",
                 ),
                 Review(
                     order_id=1006,

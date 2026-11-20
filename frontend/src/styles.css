@@ -1370,3 +1370,91 @@ button:disabled {
   color: #b87900;
   font-weight: 600;
 }
+
+/* ========== Trang menu: icon và màu theo danh mục món ==========
+   Các class này được dùng trong MenuPage, MenuItemCard, CartPanel, admin/MenuTab
+   (icon chọn trong categoryStyle.js). */
+.tone-default { --tone-bg: var(--brand-soft); --tone-ink: var(--brand); }
+.tone-burger { --tone-bg: #ffe9d6; --tone-ink: #c2540a; }
+.tone-chicken { --tone-bg: #fff1c7; --tone-ink: #9a6400; }
+.tone-sides { --tone-bg: #e5f3df; --tone-ink: #2f7a32; }
+.tone-drinks { --tone-bg: #e0eefc; --tone-ink: #1f63a8; }
+.tone-dessert { --tone-bg: #fde4ef; --tone-ink: #b5336b; }
+
+.item-thumb {
+  border-radius: 12px;
+  background: var(--tone-bg, var(--brand-soft));
+  color: var(--tone-ink, var(--brand));
+}
+
+.item-card.sold-out .item-thumb > .icon {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+/* Nút danh mục có icon bên trái */
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Tiêu đề danh mục: ô icon màu + tên + số món */
+.category-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.category-title small {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.category-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+}
+
+/* Địa chỉ và giờ mở cửa nằm cùng hàng, không dính nhau */
+.station-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 4px;
+}
+
+/* Giỏ hàng trống có minh họa */
+.cart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 8px 8px;
+  text-align: center;
+}
+
+.cart-empty strong {
+  color: var(--ink);
+}
+
+.cart-empty p {
+  margin: 0;
+}
+
+.cart-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: #fff4d1;
+  color: #b07a00;
+}
