@@ -149,7 +149,9 @@ def test_wait_times_public(client):
         client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))
     r = client.get("/api/orders/wait-times")  # không cần token
     assert r.status_code == 200
-    assert r.json() == [{"station_id": 1, "queue_count": 3, "estimated_minutes": 9}]
+    # Mỗi đơn 2 burger = 5 phút; 3 đơn = 15 phút, bếp làm 2 đơn cùng lúc -> chờ 8 phút
+    # + 5 phút cho một đơn điển hình
+    assert r.json() == [{"station_id": 1, "queue_count": 3, "estimated_minutes": 13}]
 
 
 # ---------- Đổi phương thức thanh toán ----------
@@ -248,3 +250,55 @@ def test_cannot_cancel_once_store_started(client):
     r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
     assert r.status_code == 409
     assert r.json()["detail"] == "Cửa hàng đã bắt đầu làm món nên không thể hủy đơn nữa."
+
+
+# ---------- Ước lượng giờ xong đơn ----------
+from datetime import datetime, timezone
+
+from app.estimate import order_prep_minutes
+
+
+def minutes_from_now(iso: str) -> float:
+    dt = datetime.fromisoformat(iso)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (dt - datetime.now(timezone.utc)).total_seconds() / 60
+
+
+def test_order_prep_minutes_formula():
+    assert order_prep_minutes([]) == 0
+    assert order_prep_minutes([(5, 1)]) == 5              # 1 burger
+    assert order_prep_minutes([(5, 2)]) == 5              # thêm 1 phần: chưa cộng
+    assert order_prep_minutes([(5, 2), (2, 3)]) == 7      # món lâu nhất 5 + 4 phần thêm / 2
+
+
+def test_estimate_counts_orders_ahead(client):
+    first = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()
+    assert first["prep_minutes"] == 5
+    assert first["items"][0]["prep_minutes"] == 5
+    assert 4.9 < minutes_from_now(first["estimated_ready_at"]) <= 5      # bếp đang trống
+
+    second = client.post("/api/orders", json=BODY, headers=auth(11, "CUSTOMER")).json()
+    # chờ đơn trước: 5 phút / 2 đơn cùng lúc = 3 phút (làm tròn lên), cộng 5 phút làm
+    assert 7.9 < minutes_from_now(second["estimated_ready_at"]) <= 8
+
+
+def test_momo_estimate_set_only_after_payment(client):
+    body = {**BODY, "payment_method": "MOMO"}
+    created = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()
+    assert created["estimated_ready_at"] is None                         # chưa trả tiền
+
+    paid = client.post(f"/internal/orders/{created['id']}/payment-confirmed",
+                       json={"transaction_ref": "1"}, headers={"X-Internal-Key": "ik"})
+    assert paid.json()["status"] == "CONFIRMED"
+    order = client.get(f"/api/orders/{created['id']}", headers=auth(10, "CUSTOMER")).json()
+    assert 4.9 < minutes_from_now(order["estimated_ready_at"]) <= 5
+
+
+def test_estimate_resets_when_kitchen_starts(client):
+    client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))
+    oid = client.post("/api/orders", json=BODY, headers=auth(11, "CUSTOMER")).json()["id"]
+    r = client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"},
+                     headers=auth(20, "STAFF", 1))
+    # bếp bắt đầu làm đơn này: không còn phải chờ đơn trước, xong sau 5 phút
+    assert 4.9 < minutes_from_now(r.json()["estimated_ready_at"]) <= 5

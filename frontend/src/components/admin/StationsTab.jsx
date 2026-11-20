@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { errorMessage } from '../../api/client.js'
 import { createStation, updateStation } from '../../api/menu.js'
 
-const EMPTY = { name: '', address: '', opening_hours: '', is_active: true }
+const EMPTY = { name: '', address: '', opening_hours: '', kitchen_capacity: 2, is_active: true }
 
 function StationForm({ initial, submitLabel, onSubmit, onCancel }) {
   const [form, setForm] = useState(initial)
@@ -17,7 +17,11 @@ function StationForm({ initial, submitLabel, onSubmit, onCancel }) {
     setBusy(true)
     setError('')
     try {
-      await onSubmit({ ...form, opening_hours: form.opening_hours || null })
+      await onSubmit({
+        ...form,
+        opening_hours: form.opening_hours || null,
+        kitchen_capacity: Number(form.kitchen_capacity) || 2,
+      })
     } catch (err) {
       setError(errorMessage(err))
       setBusy(false)
@@ -35,6 +39,18 @@ function StationForm({ initial, submitLabel, onSubmit, onCancel }) {
         <label className="field">
           Giờ mở cửa
           <input value={form.opening_hours || ''} onChange={set('opening_hours')} placeholder="06:00 - 22:00" maxLength={50} />
+        </label>
+        <label className="field">
+          Số đơn bếp làm cùng lúc
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={form.kitchen_capacity ?? 2}
+            onChange={set('kitchen_capacity')}
+            required
+            title="Dùng để ước lượng thời gian chờ cho khách"
+          />
         </label>
       </div>
       <label className="field">
@@ -87,7 +103,9 @@ export default function StationsTab({ stations, onChanged }) {
                   <span className={`status-pill ${s.is_active ? 'status-completed' : 'status-cancelled'}`}>
                     {s.is_active ? 'Hoạt động' : 'Ngừng'}
                   </span>
-                  <p className="muted">{s.address}{s.opening_hours ? ` · ${s.opening_hours}` : ''}</p>
+                  <p className="muted">
+                    {s.address}{s.opening_hours ? ` · ${s.opening_hours}` : ''} · bếp làm {s.kitchen_capacity ?? 2} đơn cùng lúc
+                  </p>
                 </div>
                 <button type="button" className="btn btn-ghost btn-small" onClick={() => setEditing(s.id)}>Sửa</button>
               </div>

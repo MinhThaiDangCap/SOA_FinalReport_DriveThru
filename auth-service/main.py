@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter
@@ -113,10 +114,25 @@ def seed_default_accounts():
         db.close()
 
 
+def drop_removed_columns():
+    """Database tạo trước khi bỏ Telegram còn 2 cột liên kết Telegram: xóa đi.
+
+    Chạy mỗi lần khởi động nhưng an toàn (IF EXISTS). Index của cột bị xóa theo.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE users DROP COLUMN IF EXISTS telegram_chat_id, "
+            "DROP COLUMN IF EXISTS telegram_link_token"
+        ))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
+        drop_removed_columns()
         seed_default_accounts()
         logger.info(">>> Kết nối auth_db và tạo bảng thành công!")
     except Exception as e:
@@ -126,7 +142,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GoLane Auth Service",
+<<<<<<< HEAD
     description="Dịch vụ Đăng ký, Đăng nhập, Quản lý Nhân viên và Phân quyền JWT",
+=======
+    description="Dịch vụ Đăng ký, Đăng nhập, Phân quyền JWT và Quản lý nhân viên",
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -367,7 +387,11 @@ def toggle_staff_status(
     "/internal/auth/users/{user_id}",
     response_model=UserResponse,
     tags=["Internal Service-to-Service"],
+<<<<<<< HEAD
     summary="[Internal] Lấy thông tin user từ các microservice nội bộ",
+=======
+    summary="[Internal] Lấy thông tin user cho order-service / feedback-service",
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
 )
 def get_user_internal(
     user_id: int,

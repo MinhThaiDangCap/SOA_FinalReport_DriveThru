@@ -1,10 +1,18 @@
 # 📘 TÀI LIỆU HƯỚNG DẪN & BÁO CÁO PHẦN CỦA TÂN (THÀNH VIÊN C)
 
+<<<<<<< HEAD
 Tài liệu này tổng hợp toàn bộ phần công việc của **Tân (Người C)** trong đồ án **Hệ thống Đặt món Drive-Thru GoLane (Kiến trúc Microservices - 504070)**, bao gồm:
 1. **`auth-service`** (Xác thực, Phân quyền JWT, Quản lý Nhân viên).
 2. **`feeback-service`** (Đánh giá dịch vụ 1–5 sao, Kiểm tra đơn hàng với `order-service`, Thống kê Admin).
 3. **Giám sát hệ thống (`Prometheus` + `Grafana`)** (Tự động thu thập `/metrics` từ toàn bộ 5 microservices và dựng sẵn Dashboard 6 biểu đồ).
 4. **Giao diện Frontend (`Màn hình Quầy Nhân viên & Trang Quản trị Admin`)** (React + Vite).
+=======
+Tài liệu này tổng hợp toàn bộ phần công việc của **Tân (Người C)** trong đồ án **Hệ thống Đặt món Drive-Thru (Kiến trúc Microservices - 504070)**, bao gồm:
+1. **`auth-service`** (Xác thực, Phân quyền JWT, Quản lý Nhân viên).
+2. **`feeback-service`** (Đánh giá dịch vụ 1–5 sao trên web, Kiểm tra đơn hàng, Thống kê Admin).
+3. **Giám sát hệ thống (`Prometheus` + `Grafana`)** (Tự động thu thập `/metrics` và dựng sẵn Dashboard 6 biểu đồ).
+4. **Giao diện Frontend (`Dashboard Nhân viên & Admin`)** (React + Vite).
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
 
 ---
 
@@ -56,6 +64,7 @@ Sau khi chạy xong, mở trình duyệt tại:
 
 ---
 
+<<<<<<< HEAD
 ## 4. Điểm Nhấn Kỹ Thuật Để Trả Lời Vấn Đáp (Ăn Điểm 9–10)
 
 1. **Vì sao các service khác biết user là ai mà không cần hỏi lại `auth-service` mỗi request?**
@@ -64,3 +73,14 @@ Sau khi chạy xong, mở trình duyệt tại:
    - Áp dụng mẫu **Database-per-Service**: `reviews.order_id` và `reviews.customer_id` là các ID tham chiếu logic. Khi khách gửi đánh giá, `feeback-service` gọi REST đồng bộ sang `order-service` (`/internal/orders/{id}` kèm header `X-Internal-Key`, có timeout 3 giây và retry 2 lần) để xác minh đơn hàng đã `COMPLETED` và đúng chủ sở hữu.
 3. **Khi khách chấm 1–2 sao thì điều gì xảy ra?**
    - Pydantic Schema (`@model_validator`) chặn ngay nếu khách không nhập lý do (`HTTP 422`), đồng thời bộ đếm metric `negative_reviews_total` trên Prometheus/Grafana tăng lên theo từng cửa hàng để Admin kịp thời chấn chỉnh chất lượng phục vụ.
+=======
+
+---
+
+## Ghi chú: đã bỏ Telegram
+
+Bot Telegram (gửi phiếu đánh giá, liên kết tài khoản) và `notification-service` đã được gỡ khỏi dự án:
+khách đánh giá trực tiếp trên trang đơn hàng của web, nên kênh Telegram bị trùng chức năng.
+Đánh giá 1–2 sao vẫn được theo dõi qua trang Quản trị (tab Đánh giá) và Grafana
+(metric `negative_reviews_total`).
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6

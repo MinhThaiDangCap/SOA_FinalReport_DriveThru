@@ -86,6 +86,7 @@ def test_register_and_login_flow():
     assert "access_token" in ref_res.json()
 
 
+<<<<<<< HEAD
 def test_admin_create_and_toggle_staff():
     db = TestingSessionLocal()
     admin = User(
@@ -122,3 +123,31 @@ def test_admin_create_and_toggle_staff():
     toggle_res = client.patch(f"/api/auth/staff/{staff_id}/toggle-active", headers=headers)
     assert toggle_res.status_code == 200
     assert toggle_res.json()["is_active"] is False
+=======
+def test_internal_user_lookup_requires_key():
+    reg = client.post(
+        "/api/auth/register",
+        json={
+            "email": "internal@drivethru.vn",
+            "password": "Password123",
+            "full_name": "Internal User",
+        },
+    )
+    user_id = reg.json()["id"]
+
+    # Service khác gọi kèm X-Internal-Key thì lấy được thông tin user
+    ok = client.get(
+        f"/internal/auth/users/{user_id}", headers={"X-Internal-Key": INTERNAL_KEY}
+    )
+    assert ok.status_code == 200
+    assert ok.json()["email"] == "internal@drivethru.vn"
+    assert "telegram_chat_id" not in ok.json()
+
+    # Thiếu key nội bộ thì bị chặn
+    assert client.get(f"/internal/auth/users/{user_id}").status_code in (401, 403)
+
+
+def test_telegram_endpoints_removed():
+    assert client.post("/api/auth/telegram/link-token").status_code == 404
+    assert client.post("/internal/auth/telegram/bind", json={}).status_code == 404
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6

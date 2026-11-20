@@ -21,6 +21,15 @@ STATIONS = [
 
 CATEGORIES = ["Burger", "Gà rán", "Món ăn kèm", "Đồ uống", "Tráng miệng"]
 
+# Số phút làm 1 phần món, theo danh mục (dùng để ước lượng thời gian chờ)
+PREP_MINUTES_BY_CATEGORY = {
+    "Burger": 5,
+    "Gà rán": 7,
+    "Món ăn kèm": 3,
+    "Đồ uống": 2,
+    "Tráng miệng": 1,
+}
+
 # (danh mục, tên, mô tả, giá VND) — thứ tự quyết định id
 ITEMS = [
     ("Burger", "Burger bò", "Bò nướng, phô mai, rau tươi, sốt đặc biệt", 45000),
@@ -56,6 +65,22 @@ def rename_old_brand(db: Session) -> int:
     return changed
 
 
+def fill_prep_minutes(db: Session) -> int:
+    """Database tạo trước khi có prep_minutes: đặt số phút theo danh mục mẫu.
+
+    Chỉ gọi đúng một lần, ngay sau khi vừa thêm cột. Trả về số món đã cập nhật.
+    """
+    changed = 0
+    for item in db.scalars(select(MenuItem)):
+        minutes = PREP_MINUTES_BY_CATEGORY.get(item.category.name)
+        if minutes is not None and item.prep_minutes != minutes:
+            item.prep_minutes = minutes
+            changed += 1
+    if changed:
+        db.commit()
+    return changed
+
+
 def seed_if_empty(db: Session) -> bool:
     """Trả về True nếu đã thêm dữ liệu mẫu."""
     if db.scalar(select(Station.id).limit(1)) is not None:
@@ -78,6 +103,7 @@ def seed_if_empty(db: Session) -> bool:
                 name=name,
                 description=description,
                 price=price,
+                prep_minutes=PREP_MINUTES_BY_CATEGORY.get(cat_name, 3),
             )
         )
         db.flush()

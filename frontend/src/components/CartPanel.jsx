@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { MAX_QUANTITY, useCart } from '../context/CartContext.jsx'
 import { formatPrice } from '../format.js'
+import Icon from './Icon.jsx'
 
 /**
  * Giỏ hàng bên cạnh menu.
@@ -25,11 +26,19 @@ export default function CartPanel({ stationId, soldOutIds }) {
       </div>
 
       {items.length === 0 ? (
-        <p className="cart-empty">
-          {cart.stationId !== null && !isThisStation
-            ? `Bạn đang có giỏ hàng ở "${cart.stationName}". Thêm món ở đây sẽ thay giỏ đó.`
-            : 'Chưa có món nào. Bấm "Thêm" để chọn món.'}
-        </p>
+        <div className="cart-empty">
+          <span className="cart-empty-icon">
+            <Icon name="bag" size={30} strokeWidth={1.6} />
+          </span>
+          {cart.stationId !== null && !isThisStation ? (
+            <p>Bạn đang có giỏ hàng ở "{cart.stationName}". Thêm món ở đây sẽ thay giỏ đó.</p>
+          ) : (
+            <>
+              <strong>Giỏ hàng đang trống</strong>
+              <p>Bấm "Thêm" ở món bạn thích để bắt đầu.</p>
+            </>
+          )}
+        </div>
       ) : (
         <>
           <ul className="cart-list">

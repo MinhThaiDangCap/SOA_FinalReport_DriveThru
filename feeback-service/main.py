@@ -7,6 +7,7 @@ import httpx
 import jwt
 from fastapi import FastAPI, Depends, HTTPException, status, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter
@@ -30,7 +31,7 @@ ORDER_SERVICE_FALLBACK = os.getenv("ORDER_SERVICE_FALLBACK", "true").lower() == 
 REVIEWS_CREATED_TOTAL = Counter(
     "reviews_created_total",
     "Total number of customer reviews created",
-    ["station_id", "rating", "source"],
+    ["station_id", "rating"],
 )
 NEGATIVE_REVIEWS_TOTAL = Counter(
     "negative_reviews_total",
@@ -51,7 +52,6 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=5,
                     comment="Nhận đồ ăn tại làn xe cực nhanh, nhân viên nhìn biển số giao đúng ngay lập tức!",
-                    source="web",
                 ),
                 Review(
                     order_id=1002,
@@ -59,7 +59,10 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=4,
                     comment="Burger bò phô mai nóng hổi, khoai tây giòn.",
+<<<<<<< HEAD
                     source="web",
+=======
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
                 ),
                 Review(
                     order_id=1003,
@@ -67,7 +70,6 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=2,
                     comment="Nước ngọt bị tan đá hơi nhạt, chờ ở làn xe mất gần 7 phút.",
-                    source="web",
                 ),
                 Review(
                     order_id=1004,
@@ -75,15 +77,22 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=1,
                     comment="Giao thiếu 1 gói tương ớt và khăn giấy dù đã ghi chú.",
+<<<<<<< HEAD
                     source="web",
+=======
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
                 ),
                 Review(
                     order_id=1005,
                     customer_id=4,
                     station_id=2,
                     rating=5,
+<<<<<<< HEAD
                     comment="Chi nhánh rộng rãi, bấm Tôi đã đến là 30 giây sau có nhân viên mang ra.",
                     source="web",
+=======
+                    comment="Chi nhánh Quận 7 rộng rãi, bấm Tôi đã đến là 30 giây sau có nhân viên mang ra.",
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
                 ),
                 Review(
                     order_id=1006,
@@ -91,7 +100,6 @@ def seed_sample_reviews():
                     station_id=2,
                     rating=2,
                     comment="Món gà rán hơi nguội vào khung giờ tối.",
-                    source="web",
                 ),
             ]
             db.add_all(samples)
@@ -103,10 +111,22 @@ def seed_sample_reviews():
         db.close()
 
 
+def drop_removed_columns():
+    """Database tạo trước khi bỏ Telegram còn cột reviews.source ("web"/"telegram").
+
+    Giờ chỉ còn đánh giá trên web nên xóa cột này. Chạy mỗi lần khởi động nhưng an toàn.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE reviews DROP COLUMN IF EXISTS source"))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
+        drop_removed_columns()
         seed_sample_reviews()
         logger.info(">>> Đã kết nối feedback_db và kiểm tra bảng 'reviews' thành công!")
     except Exception as e:
@@ -235,17 +255,19 @@ def create_review(
         station_id=station_id,
         rating=req.rating,
         comment=req.comment,
-        source="web",
     )
     db.add(new_review)
     db.commit()
     db.refresh(new_review)
 
+<<<<<<< HEAD
     # 4. Cập nhật Prometheus Metrics
+=======
+    # 4. Cập nhật Prometheus Metrics (Grafana theo dõi đánh giá 1-2 sao)
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
     REVIEWS_CREATED_TOTAL.labels(
         station_id=str(station_id),
         rating=str(req.rating),
-        source="web",
     ).inc()
     if req.rating <= 2:
         NEGATIVE_REVIEWS_TOTAL.labels(station_id=str(station_id)).inc()

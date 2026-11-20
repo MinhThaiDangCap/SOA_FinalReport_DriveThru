@@ -18,7 +18,11 @@ services:
       timeout: 5s
       retries: 5
 
+<<<<<<< HEAD
   # 2. Auth Service (Đăng ký, Đăng nhập, JWT, Quản lý Nhân viên)
+=======
+  # 2. Auth Service (Đăng ký, Đăng nhập, JWT, Nhân viên)
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
   auth-service:
     build: ./auth-service
     container_name: drivethru_auth
@@ -162,7 +166,11 @@ services:
     depends_on:
       - gateway
 
+<<<<<<< HEAD
   # 9. Prometheus (Thu thập metrics từ toàn bộ microservices)
+=======
+  # 4. Prometheus (Thu thập metrics từ toàn bộ microservices)
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: drivethru_prometheus
@@ -172,7 +180,11 @@ services:
     ports:
       - "9090:9090"
 
+<<<<<<< HEAD
   # 10. Grafana (Dashboard giám sát tự động nạp sẵn)
+=======
+  # 5. Grafana (Dashboard giám sát tự động nạp sẵn)
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
   grafana:
     image: grafana/grafana:10.4.1
     container_name: drivethru_grafana

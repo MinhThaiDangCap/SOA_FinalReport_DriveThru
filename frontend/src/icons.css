@@ -48,10 +48,8 @@
 }
 
 /* Ảnh món khi chưa có ảnh */
-.item-thumb .icon,
 .admin-thumb .icon {
-  color: var(--brand);
-  opacity: 0.75;
+  color: var(--tone-ink, var(--brand));
 }
 
 /* Kết quả thanh toán */

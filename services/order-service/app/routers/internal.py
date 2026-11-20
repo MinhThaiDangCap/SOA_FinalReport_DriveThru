@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import OrderStatus, OrderStatusHistory
-from app.routers.orders import get_order_or_404
+from app.routers.orders import get_order_or_404, update_estimate
 from app.schemas import InternalOrderOut, PaymentConfirmIn
 from app.security import verify_internal_key
 from app.state_machine import change_status
@@ -33,6 +33,7 @@ def payment_confirmed(
         if payload.transaction_ref:
             note += f" (mã GD: {payload.transaction_ref})"
         change_status(order, OrderStatus.CONFIRMED, None, note)
+        update_estimate(db, order)  # đã trả tiền: đơn vào hàng đợi của bếp
         db.commit()
         db.refresh(order)
     elif order.status == OrderStatus.CANCELLED.value:

@@ -16,6 +16,8 @@ class Station(Base):
     address: Mapped[str] = mapped_column(String(255))
     opening_hours: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)  # False = ngừng hoạt động
+    # Số đơn bếp làm được cùng lúc (dùng để ước lượng thời gian chờ)
+    kitchen_capacity: Mapped[int] = mapped_column(default=2, server_default="2")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -44,6 +46,8 @@ class MenuItem(Base):
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     price: Mapped[int] = mapped_column()
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Số phút bếp cần để làm xong 1 phần món này (cố định, admin tự đặt)
+    prep_minutes: Mapped[int] = mapped_column(default=3, server_default="3")
     is_active: Mapped[bool] = mapped_column(default=True)  # False = ngừng bán hẳn
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

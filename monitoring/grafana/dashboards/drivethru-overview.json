@@ -158,12 +158,12 @@
         "y": 13
       },
       "id": 5,
-      "title": "Nghiệp Vụ: Đánh Giá Mới Theo Số Sao & Nguồn (feedback-service)",
+      "title": "Nghiệp Vụ: Đánh Giá Mới Theo Số Sao (feedback-service)",
       "type": "bargauge",
       "targets": [
         {
-          "expr": "sum by (rating, source) (reviews_created_total)",
-          "legendFormat": "{{rating}} sao ({{source}})",
+          "expr": "sum by (rating) (reviews_created_total)",
+          "legendFormat": "{{rating}} sao",
           "refId": "A"
         }
       ]

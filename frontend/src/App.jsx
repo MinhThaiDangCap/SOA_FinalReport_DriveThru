@@ -34,6 +34,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
+<<<<<<< HEAD
         <div className="topbar-inner">
           <Link to={user ? homePath(user.role) : '/login'} className="brand">
             <span className="brand-mark" aria-hidden="true">
@@ -104,6 +105,52 @@ export default function App() {
             )}
           </nav>
         </div>
+=======
+        <Link to={user ? homePath(user.role) : '/login'} className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <Icon name="car" size={20} strokeWidth={2} />
+          </span>
+          <span className="brand-text">GoLane</span>
+        </Link>
+
+        <nav className="topbar-nav">
+          {user?.role === 'CUSTOMER' && cart.stationId && totalQuantity > 0 && (
+            <Link to={`/stations/${cart.stationId}`} className="topbar-cart" aria-label={`Giỏ hàng (${totalQuantity})`}>
+              <Icon name="bag" size={18} />
+              <span className="topbar-cart-text">Giỏ hàng</span>
+              <span key={totalQuantity} className="badge badge-bump">{totalQuantity}</span>
+            </Link>
+          )}
+          {user?.role === 'CUSTOMER' && (
+            <Link to="/orders" className="topbar-link">Đơn của tôi</Link>
+          )}
+          {user?.role === 'STAFF' && (
+            <Link to="/staff" className="topbar-link">Màn hình quầy</Link>
+          )}
+          {user?.role === 'ADMIN' && (
+            <Link to="/admin" className="topbar-link">Quản trị</Link>
+          )}
+          {user ? (
+            <>
+              <span className="topbar-user">{user.full_name}</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-small topbar-logout"
+                onClick={logout}
+                aria-label="Đăng xuất"
+              >
+                <Icon name="logout" size={18} />
+                <span className="btn-text">Đăng xuất</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="btn btn-ghost btn-small">Đăng nhập</Link>
+              <Link to="/register" className="btn btn-small">Đăng ký</Link>
+            </>
+          )}
+        </nav>
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
       </header>
 
       <main className="page">

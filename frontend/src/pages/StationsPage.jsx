@@ -56,6 +56,14 @@ const FAQS = [
   },
 ]
 
+// Các món "bay" quanh hình xe ở phần đầu trang
+const HERO_FOODS = [
+  { icon: 'burger', tone: 'burger' },
+  { icon: 'cup', tone: 'drinks' },
+  { icon: 'fries', tone: 'sides' },
+  { icon: 'iceCream', tone: 'dessert' },
+]
+
 const ACTIVE = ['PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'ARRIVED']
 
 export function isOpenNow(hours, now = new Date()) {
@@ -210,6 +218,7 @@ export default function StationsPage() {
     <>
       <ActiveOrders />
 
+<<<<<<< HEAD
       {/* 1. HERO BANNER CÓ ẢNH CHỤP THỰC TẾ */}
       <section className="hero hero-home">
         <div className="hero-content">
@@ -260,6 +269,48 @@ export default function StationsPage() {
 
       {/* 3. DANH SÁCH CỬA HÀNG */}
       <section id="stations" className="home-section">
+=======
+      <section className="hero-banner">
+        <div className="hero-copy">
+          <p className="hero-eyebrow">GoLane · Đặt trước, không cần xuống xe</p>
+          <h1>Đặt trước, lái xe qua, nhận món</h1>
+          <p className="hero-lead">
+            Chọn cửa hàng bạn sẽ ghé, đặt món và thanh toán ngay trên web. Tới nơi chỉ cần bấm
+            "Tôi đã đến", món được mang ra tận xe.
+          </p>
+          <a href="#stations" className="btn btn-accent">
+            Chọn cửa hàng <Icon name="arrowRight" size={18} strokeWidth={2.2} />
+          </a>
+        </div>
+        <div className="hero-art" aria-hidden="true">
+          <span className="hero-car">
+            <Icon name="car" size={92} strokeWidth={1.4} />
+          </span>
+          {HERO_FOODS.map((f, i) => (
+            <span key={f.icon} className={`hero-food hero-food-${i + 1} tone-${f.tone}`}>
+              <Icon name={f.icon} size={30} strokeWidth={1.6} />
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <ol className="steps-row">
+        {STEPS.map((s, i) => (
+          <li key={s.title}>
+            <span className="step-icon">
+              <Icon name={s.icon} size={22} />
+              <span className="step-num">{i + 1}</span>
+            </span>
+            <div>
+              <strong>{s.title}</strong>
+              <p>{s.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <section id="stations">
+>>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
         <div className="stations-head">
           <div>
             <p className="dash-eyebrow">Hệ thống chi nhánh</p>
