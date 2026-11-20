@@ -3,13 +3,11 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
 import { getStations } from '../api/menu.js'
-import { cancelOrder, changePaymentMethod, getOrder, markArrived } from '../api/orders.js'
-import ConfirmDialog from '../components/ConfirmDialog.jsx'
-import Icon from '../components/Icon.jsx'
-import ReviewBox from '../components/ReviewBox.jsx'
+import { cancelOrder, getOrder, markArrived } from '../api/orders.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
 import { payForOrder } from '../payment.js'
+import ReviewBox from '../components/ReviewBox.jsx'
 
 const POLL_MS = 5000
 const TERMINAL = ['COMPLETED', 'CANCELLED']
@@ -19,7 +17,7 @@ const STATUS_HINT = {
   PENDING_PAYMENT: 'Đơn đang chờ thanh toán. Hoàn tất thanh toán để cửa hàng bắt đầu chuẩn bị.',
   CONFIRMED: 'Cửa hàng đã nhận đơn và sẽ sớm chuẩn bị món cho bạn.',
   PREPARING: 'Món của bạn đang được chuẩn bị.',
-  READY: 'Món đã sẵn sàng. Khi tới làn nhận món, bấm "Tôi đã đến" để nhân viên mang món ra.',
+  READY: 'Món đã sẵn sàng. Hãy chạy xe tới quầy và bấm "Tôi đã đến".',
   ARRIVED: 'Cửa hàng đã biết bạn có mặt, nhân viên sẽ giao món ngay.',
   COMPLETED: 'Đơn đã hoàn thành. Cảm ơn bạn!',
   CANCELLED: 'Đơn đã bị hủy.',
@@ -35,9 +33,6 @@ export default function OrderPage() {
   const [notice, setNotice] = useState(location.state?.notice || '')
   const [busy, setBusy] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
-  // Hộp thoại đang mở: 'cancel' | 'method' | null
-  const [dialog, setDialog] = useState(null)
-  const [newMethod, setNewMethod] = useState('CASH')
 
   const status = order?.status
   const stationId = order?.station_id
@@ -81,34 +76,16 @@ export default function OrderPage() {
       .catch(() => {})
   }, [stationId])
 
-  async function runAction(action) {
+  async function runAction(action, confirmText) {
+    if (confirmText && !window.confirm(confirmText)) return
     setBusy(true)
     setNotice('')
     try {
-      const updated = await action(order.id)
-      setOrder(updated)
-      return updated
+      setOrder(await action(order.id))
     } catch (err) {
       setNotice(errorMessage(err))
-      // Trạng thái có thể đã đổi (vd. cửa hàng vừa bắt đầu làm): tải lại để ẩn nút không còn dùng được
-      setReloadKey((k) => k + 1)
-      return null
     } finally {
       setBusy(false)
-      setDialog(null)
-    }
-  }
-
-  function openMethodDialog() {
-    setNewMethod(order.payment_method === 'MOMO' ? 'CASH' : 'MOMO')
-    setDialog('method')
-  }
-
-  async function handleChangeMethod() {
-    const updated = await runAction((id) => changePaymentMethod(id, newMethod))
-    // Đổi sang MoMo: đi thẳng tới trang thanh toán cho khách khỏi bấm thêm
-    if (updated?.payment_method === 'MOMO' && updated.status === 'PENDING_PAYMENT') {
-      await handlePay()
     }
   }
 
@@ -145,30 +122,14 @@ export default function OrderPage() {
   const currentKey = status === 'ARRIVED' ? 'READY' : status
   const currentIndex = steps.indexOf(currentKey)
 
-  const needsPayment = status === 'PENDING_PAYMENT' && order.payment_method === 'MOMO'
+  const needsPayment = status === 'PENDING_PAYMENT' && order.payment_method === 'VNPAY'
   const canCancel = isCustomer && ['PENDING_PAYMENT', 'CONFIRMED'].includes(status)
-  // Xe tới quầy là cờ riêng (arrived_at): báo được từ lúc quán nhận đơn, không đổi tiến độ bếp
-  const arrived = !!order.arrived_at || status === 'ARRIVED'
-  const canArrive = isCustomer && !arrived && ['CONFIRMED', 'PREPARING', 'READY'].includes(status)
-  const arrivedNote =
-    status === 'READY' || status === 'ARRIVED'
-      ? 'Món đã xong, nhân viên đang mang ra xe cho bạn.'
-      : 'Món đang được chuẩn bị, cửa hàng sẽ ưu tiên đơn của bạn. Vui lòng chờ tại làn nhận món.'
-  // Đổi được khi chưa trả tiền và quán chưa làm: MoMo đang chờ trả, hoặc tiền mặt chưa làm món
-  const canChangeMethod =
-    isCustomer &&
-    ((order.payment_method === 'MOMO' && status === 'PENDING_PAYMENT') ||
-      (order.payment_method === 'CASH' && status === 'CONFIRMED'))
-  const paidMomoCancel = order.payment_method === 'MOMO' && status === 'CONFIRMED'
-  const cashPaidAt =
-    order.payment_method === 'CASH' && status === 'COMPLETED'
-      ? order.history.find((h) => h.to_status === 'COMPLETED')?.changed_at
-      : null
+  const canArrive = isCustomer && ['PREPARING', 'READY'].includes(status)
 
   return (
     <div className="checkout order-detail">
       <Link to={isCustomer ? '/orders' : '/'} className="back-link">
-        <Icon name="arrowLeft" size={16} /> {isCustomer ? 'Đơn của tôi' : 'Trang chủ'}
+        ← {isCustomer ? 'Đơn của tôi' : 'Trang chủ'}
       </Link>
       <h1>Đơn #{order.id}</h1>
       <p className="order-status">
@@ -178,38 +139,7 @@ export default function OrderPage() {
       </p>
       <p className="order-hint">{STATUS_HINT[status]}</p>
       {order.payment_method === 'CASH' && !finished && (
-        <div className="cash-box">
-          <Icon name="card" size={22} />
-          <div>
-            <strong>Chuẩn bị {formatPrice(order.total_amount)} tiền mặt</strong>
-            <p>
-              Bạn thanh toán cho nhân viên tại quầy khi nhận món. Nhân viên sẽ xác nhận đã thu tiền
-              rồi mới giao món.
-            </p>
-          </div>
-        </div>
-      )}
-      {cashPaidAt && (
-        <div className="cash-box cash-box-done">
-          <Icon name="check" size={22} strokeWidth={2.4} />
-          <div>
-            <strong>Đã thanh toán {formatPrice(order.total_amount)} tiền mặt</strong>
-            <p>Nhân viên đã xác nhận thu tiền lúc {formatDateTime(cashPaidAt)}.</p>
-          </div>
-        </div>
-      )}
-
-      {arrived && !finished && (
-        <div className="cash-box cash-box-done">
-          <Icon name="car" size={22} />
-          <div>
-            <strong>
-              Cửa hàng đã nhận được thông báo bạn đã tới
-              {order.arrived_at && ` lúc ${formatDateTime(order.arrived_at)}`}
-            </strong>
-            <p>{arrivedNote}</p>
-          </div>
-        </div>
+        <p className="order-hint">Bạn thanh toán tiền mặt tại quầy khi nhận món.</p>
       )}
 
       {notice && <div className="form-error" role="alert">{notice}</div>}
@@ -221,7 +151,7 @@ export default function OrderPage() {
             const now = i === currentIndex && status !== 'COMPLETED'
             return (
               <li key={s} className={done ? 'progress-done' : now ? 'progress-now' : ''}>
-                <span className="progress-dot">{done ? <Icon name="check" size={15} strokeWidth={2.6} /> : i + 1}</span>
+                <span className="progress-dot">{done ? '✓' : i + 1}</span>
                 <span className="progress-label">
                   {s === 'READY' && status === 'ARRIVED' ? 'Khách đã đến' : STATUS_LABEL[s]}
                 </span>
@@ -268,111 +198,35 @@ export default function OrderPage() {
           type="button"
           className="btn btn-block order-action"
           onClick={() => runAction(markArrived)}
-          disabled={busy}
+          disabled={busy || status === 'ARRIVED'}
         >
           Tôi đã đến
-        </button>
-      )}
-      {canChangeMethod && (
-        <button
-          type="button"
-          className="btn btn-ghost btn-block order-action"
-          onClick={openMethodDialog}
-          disabled={busy}
-        >
-          Đổi phương thức thanh toán
         </button>
       )}
       {canCancel && (
         <button
           type="button"
           className="btn btn-ghost btn-block order-action"
-          onClick={() => setDialog('cancel')}
+          onClick={() => runAction(cancelOrder, 'Bạn chắc chắn muốn hủy đơn này?')}
           disabled={busy}
         >
           Hủy đơn
         </button>
       )}
-      {canCancel && (
-        <p className="order-hint cancel-hint">
-          Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món
-          {paidMomoCancel ? ', tiền sẽ được hoàn về ví MoMo.' : '.'}
-        </p>
-      )}
 
-      {dialog === 'cancel' && (
-        <ConfirmDialog
-          title={`Hủy đơn #${order.id}?`}
-          confirmLabel="Hủy đơn"
-          cancelLabel="Giữ đơn"
-          busy={busy}
-          onConfirm={() => runAction(cancelOrder)}
-          onCancel={() => setDialog(null)}
-        >
-          <p>
-            {paidMomoCancel
-              ? `${formatPrice(order.total_amount)} sẽ được hoàn về ví MoMo của bạn.`
-              : 'Đơn sẽ bị hủy và cửa hàng không chuẩn bị món nữa.'}
-          </p>
-        </ConfirmDialog>
-      )}
-
-      {dialog === 'method' && (
-        <ConfirmDialog
-          title="Đổi phương thức thanh toán"
-          confirmLabel={newMethod === 'MOMO' ? 'Đổi và thanh toán MoMo' : 'Đổi sang trả tại quầy'}
-          confirmDisabled={newMethod === order.payment_method}
-          busy={busy}
-          onConfirm={handleChangeMethod}
-          onCancel={() => setDialog(null)}
-        >
-          <fieldset className="option-group">
-            <legend>Chọn cách thanh toán cho đơn #{order.id}</legend>
-            <label className={`option ${newMethod === 'MOMO' ? 'option-on' : ''}`}>
-              <input
-                type="radio"
-                name="new-method"
-                checked={newMethod === 'MOMO'}
-                onChange={() => setNewMethod('MOMO')}
-              />
-              <span>
-                <strong>Thanh toán online (MoMo){order.payment_method === 'MOMO' && ' · đang chọn'}</strong>
-                <small>Trả ngay, cửa hàng chỉ làm món sau khi nhận được tiền</small>
-              </span>
-            </label>
-            <label className={`option ${newMethod === 'CASH' ? 'option-on' : ''}`}>
-              <input
-                type="radio"
-                name="new-method"
-                checked={newMethod === 'CASH'}
-                onChange={() => setNewMethod('CASH')}
-              />
-              <span>
-                <strong>Trả tại quầy{order.payment_method === 'CASH' && ' · đang chọn'}</strong>
-                <small>Cửa hàng làm món ngay, bạn trả tiền mặt khi nhận món</small>
-              </span>
-            </label>
-          </fieldset>
-        </ConfirmDialog>
-      )}
-
-      {isCustomer && status === 'COMPLETED' && (
+            {status === 'COMPLETED' && isCustomer && (
         <ReviewBox orderId={order.id} stationId={order.station_id} />
       )}
 
       <h2 className="timeline-title">Lịch sử đơn hàng</h2>
       <ul className="timeline">
-        {order.history.map((h, i) => {
-          // Sự kiện không đổi trạng thái (khách tới quầy, ghi chú thanh toán): lấy ghi chú làm tiêu đề
-          const event = h.from_status === h.to_status && h.note
-          return (
-            <li key={i}>
-              <strong>{event ? h.note : STATUS_LABEL[h.to_status] || h.to_status}</strong>
-              <span>{formatDateTime(h.changed_at)}</span>
-              {!event && h.note && <small>{h.note}</small>}
-            </li>
-          )
-        })}
+        {order.history.map((h, i) => (
+          <li key={i}>
+            <strong>{STATUS_LABEL[h.to_status] || h.to_status}</strong>
+            <span>{formatDateTime(h.changed_at)}</span>
+            {h.note && <small>{h.note}</small>}
+          </li>
+        ))}
       </ul>
     </div>
   )
