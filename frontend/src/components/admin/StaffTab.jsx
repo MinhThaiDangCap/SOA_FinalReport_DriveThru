@@ -25,10 +25,33 @@ export default function StaffTab({ stations }) {
 
   async function handleCreate(e) {
     e.preventDefault()
+    const fullName = form.full_name.trim()
+    const email = form.email.trim()
+    const phone = form.phone.trim()
+    if (fullName.length < 2) {
+      setError('Họ và tên phải có từ 2 ký tự trở lên.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Email không đúng định dạng (ví dụ: ten@gmail.com).')
+      return
+    }
+    if (phone && !/^0\d{9}$/.test(phone)) {
+      setError('Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.')
+      return
+    }
+    if (form.password.length < 6) {
+      setError('Mật khẩu phải có từ 6 ký tự trở lên.')
+      return
+    }
+    if (!form.station_id) {
+      setError('Vui lòng chọn cửa hàng cho nhân viên.')
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      await createStaff({ ...form, phone: form.phone || null, station_id: Number(form.station_id) })
+      await createStaff({ ...form, full_name: fullName, email, phone: phone || null, station_id: Number(form.station_id) })
       setForm(EMPTY)
       setShowForm(false)
       load()
@@ -62,7 +85,7 @@ export default function StaffTab({ stations }) {
       {error && <div className="form-error" role="alert">{error}</div>}
 
       {showForm && (
-        <form className="form panel-form" onSubmit={handleCreate}>
+        <form className="form panel-form" onSubmit={handleCreate} noValidate>
           <div className="form-row">
             <label className="field">
               Họ và tên
@@ -76,7 +99,7 @@ export default function StaffTab({ stations }) {
           <div className="form-row">
             <label className="field">
               Số điện thoại
-              <input type="tel" value={form.phone} onChange={set('phone')} />
+              <input type="tel" value={form.phone} onChange={set('phone')} placeholder="0901234567" />
             </label>
             <label className="field">
               Mật khẩu ban đầu (tối thiểu 6 ký tự)

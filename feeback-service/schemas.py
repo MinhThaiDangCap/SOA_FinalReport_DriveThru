@@ -20,14 +20,6 @@ class ReviewCreate(BaseModel):
         return self
 
 
-class TelegramReviewCreate(BaseModel):
-    order_id: int
-    customer_id: Optional[int] = 1
-    station_id: Optional[int] = 1
-    rating: int = Field(..., ge=1, le=5)
-    comment: Optional[str] = None
-
-
 class ReviewResponse(BaseModel):
     id: int
     order_id: int
@@ -48,4 +40,3 @@ class StationStatsResponse(BaseModel):
     average_rating: float
     rating_breakdown: Dict[int, int]
     negative_reviews: List[ReviewResponse]
-

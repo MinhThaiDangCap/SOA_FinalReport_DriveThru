@@ -13,15 +13,11 @@ class User(Base):
     full_name = Column(String(100), nullable=False)
     phone = Column(String(20), nullable=True)
 
-    # Vai trò: "customer" | "staff" | "admin"
-    role = Column(String(20), default="customer", nullable=False)
+    # Vai trò: "CUSTOMER" | "STAFF" | "ADMIN"
+    role = Column(String(20), default="CUSTOMER", nullable=False)
 
-    # ID cửa hàng dành cho nhân viên (staff)
+    # ID cửa hàng dành cho nhân viên (STAFF)
     station_id = Column(Integer, nullable=True)
-
-    # Liên kết Telegram (dành cho thông báo & khảo sát qua Bot)
-    telegram_chat_id = Column(String(50), nullable=True, index=True)
-    telegram_link_token = Column(String(100), nullable=True, unique=True, index=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
@@ -37,4 +33,3 @@ class RefreshToken(Base):
     expires_at = Column(DateTime, nullable=False)
     revoked = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-

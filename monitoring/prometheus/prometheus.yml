@@ -10,17 +10,7 @@ scrape_configs:
   - job_name: "auth-service"
     metrics_path: "/metrics"
     static_configs:
-      - targets: ["auth-service:8000", "host.docker.internal:8001"]
-
-  - job_name: "feedback-service"
-    metrics_path: "/metrics"
-    static_configs:
-      - targets: ["feedback-service:8000", "host.docker.internal:8002"]
-
-  - job_name: "notification-service"
-    metrics_path: "/metrics"
-    static_configs:
-      - targets: ["notification-service:8000", "host.docker.internal:8006"]
+      - targets: ["auth-service:8000"]
 
   - job_name: "menu-service"
     metrics_path: "/metrics"
@@ -37,3 +27,7 @@ scrape_configs:
     static_configs:
       - targets: ["payment-service:8000"]
 
+  - job_name: "feedback-service"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["feedback-service:8000"]

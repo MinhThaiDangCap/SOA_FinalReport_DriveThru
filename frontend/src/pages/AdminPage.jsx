@@ -71,12 +71,22 @@ export default function AdminPage() {
     <div className="dash">
       <header className="dash-head">
         <div>
-          <p className="dash-eyebrow">Quản trị hệ thống</p>
+          <p className="dash-eyebrow">Quản trị hệ thống · Chuỗi GoLane ({stations.length} chi nhánh)</p>
           <h1>{TABS.find((t) => t.key === tab)?.label}</h1>
         </div>
-        {tab === 'reviews' && (
-          <StationPicker stations={stations} value={reviewStation} onChange={setReviewStation} />
-        )}
+        <div className="dash-head-actions">
+          {tab === 'reviews' && (
+            <StationPicker stations={stations} value={reviewStation} onChange={setReviewStation} />
+          )}
+          <a
+            href="http://localhost:3000"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-ghost btn-small"
+          >
+            Giám sát Grafana ↗
+          </a>
+        </div>
       </header>
 
       <nav className="category-tabs dash-tabs">

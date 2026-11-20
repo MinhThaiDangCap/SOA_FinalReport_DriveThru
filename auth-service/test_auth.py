@@ -6,7 +6,8 @@ from sqlalchemy.pool import StaticPool
 
 from main import app
 from database import Base, get_db
-from security import INTERNAL_KEY
+from models import User
+from security import hash_password
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
@@ -57,7 +58,7 @@ def test_register_and_login_flow():
     assert reg_res.status_code == 201
     user_data = reg_res.json()
     assert user_data["email"] == "testuser@drivethru.vn"
-    assert user_data["role"] == "customer"
+    assert user_data["role"] == "CUSTOMER"
 
     # 2. Đăng nhập
     login_res = client.post(
@@ -85,36 +86,39 @@ def test_register_and_login_flow():
     assert "access_token" in ref_res.json()
 
 
-def test_telegram_link_and_bind():
-    # Đăng ký & đăng nhập
-    client.post(
-        "/api/auth/register",
-        json={
-            "email": "tele@drivethru.vn",
-            "password": "Password123",
-            "full_name": "Tele User",
-        },
+def test_admin_create_and_toggle_staff():
+    db = TestingSessionLocal()
+    admin = User(
+        email="admin@drivethru.vn",
+        hashed_password=hash_password("Password123"),
+        full_name="Admin Test",
+        role="ADMIN",
     )
+    db.add(admin)
+    db.commit()
+    db.close()
+
     login_res = client.post(
         "/api/auth/login",
-        json={"email": "tele@drivethru.vn", "password": "Password123"},
+        json={"email": "admin@drivethru.vn", "password": "Password123"},
     )
-    token = login_res.json()["access_token"]
+    assert login_res.status_code == 200
+    headers = {"Authorization": f"Bearer {login_res.json()['access_token']}"}
 
-    # Tạo link token
-    link_res = client.post(
-        "/api/auth/telegram/link-token",
-        headers={"Authorization": f"Bearer {token}"},
+    staff_res = client.post(
+        "/api/auth/staff",
+        json={
+            "email": "staff_new@drivethru.vn",
+            "password": "Password123",
+            "full_name": "Nhân Viên Mới",
+            "phone": "0905555555",
+            "station_id": 1,
+        },
+        headers=headers,
     )
-    assert link_res.status_code == 200
-    link_token = link_res.json()["link_token"]
+    assert staff_res.status_code == 201
+    staff_id = staff_res.json()["id"]
 
-    # Gọi internal bind từ Telegram bot
-    bind_res = client.post(
-        "/internal/auth/telegram/bind",
-        json={"token": link_token, "chat_id": "987654321"},
-        headers={"X-Internal-Key": INTERNAL_KEY},
-    )
-    assert bind_res.status_code == 200
-    assert bind_res.json()["telegram_chat_id"] == "987654321"
-
+    toggle_res = client.patch(f"/api/auth/staff/{staff_id}/toggle-active", headers=headers)
+    assert toggle_res.status_code == 200
+    assert toggle_res.json()["is_active"] is False

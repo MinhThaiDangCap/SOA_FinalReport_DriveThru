@@ -1,26 +1,3 @@
-# Khóa bí mật, TUYỆT ĐỐI không commit
-.env
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-.pytest_cache/
-# SQLite dùng khi dev không có Postgres
-*.db
-
-# Node / React
-node_modules/
-frontend/dist/
-
-# IDE và hệ điều hành
-.vscode/
-.idea/
-.DS_Store
-
-# Dữ liệu database của Docker (nếu mount ra thư mục)
-pgdata/
 # Khóa bí mật (TUYỆT ĐỐI không đẩy lên Git)
 .env
 **/.env
@@ -35,20 +12,13 @@ venv/
 **/venv/
 .pytest_cache/
 **/.pytest_cache/
+*.db
 
 # Node / React
 node_modules/
 **/node_modules/
 frontend/dist/
 dist/
-
-# Java / Maven
-target/
-**/target/
-*.jar
-*.war
-*.zip
-*.log
 
 # IDE & OS
 .vscode/

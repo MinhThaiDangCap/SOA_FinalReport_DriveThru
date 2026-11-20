@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import main
 from main import app, get_current_user
 from database import Base, get_db
 
@@ -29,7 +30,7 @@ def override_get_current_user():
     return {
         "sub": "1",
         "email": "customer@drivethru.vn",
-        "role": "customer",
+        "role": "CUSTOMER",
     }
 
 
@@ -39,7 +40,18 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def setup_db():
+def setup_db(monkeypatch):
+    # Giả lập kết quả trả về từ order-service để unit test chạy độc lập cả trong lẫn ngoài Docker
+    monkeypatch.setattr(
+        main,
+        "fetch_order_from_order_service",
+        lambda order_id, fallback_customer_id, fallback_station_id: {
+            "id": order_id,
+            "status": "COMPLETED",
+            "customer_id": fallback_customer_id,
+            "station_id": fallback_station_id,
+        },
+    )
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
@@ -116,4 +128,3 @@ def test_get_order_review_requires_login_and_owner():
         assert client.get("/api/reviews/orders/2004").status_code == 401
     finally:
         app.dependency_overrides[get_current_user] = override_get_current_user
-

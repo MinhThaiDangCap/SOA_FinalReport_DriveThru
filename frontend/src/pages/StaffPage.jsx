@@ -38,8 +38,11 @@ export default function StaffPage() {
     <div className="dash">
       <header className="dash-head">
         <div>
-          <p className="dash-eyebrow">Màn hình quầy</p>
+          <p className="dash-eyebrow">Màn hình quầy · Ca trực: {user?.full_name}</p>
           <h1>{stationName || `Cửa hàng #${stationId}`}</h1>
+        </div>
+        <div className="dash-live-pill">
+          <span className="live-dot" /> Đang nhận đơn trực tiếp (5s)
         </div>
       </header>
 

@@ -1,4 +1,4 @@
-import axios from 'axios'
+ import axios from 'axios'
 
 // Đường dẫn tương đối: chạy được cả với Vite proxy (dev) lẫn Nginx/ngrok (demo).
 const client = axios.create({ baseURL: '/api', timeout: 8000 })
@@ -34,6 +34,16 @@ client.interceptors.response.use(
 export function errorMessage(error) {
   const detail = error?.response?.data?.detail
   if (typeof detail === 'string') return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const firstMsg = detail[0]?.msg || ''
+    const field = detail[0]?.loc?.[detail[0].loc.length - 1]
+    if (firstMsg.startsWith('Value error, ')) return firstMsg.slice('Value error, '.length)
+    if (field === 'email') return 'Email không đúng định dạng (ví dụ: ten@gmail.com).'
+    if (field === 'phone') return 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng số 0.'
+    if (field === 'password') return 'Mật khẩu phải có từ 6 ký tự trở lên.'
+    if (field === 'full_name') return 'Họ và tên phải có từ 2 ký tự trở lên.'
+    return firstMsg || 'Thông tin chưa hợp lệ, vui lòng kiểm tra lại.'
+  }
   if (error?.response?.status === 422) return 'Thông tin chưa hợp lệ, vui lòng kiểm tra lại.'
   if (error?.code === 'ECONNABORTED') return 'Máy chủ phản hồi quá lâu, vui lòng thử lại.'
   if (!error?.response) return 'Không kết nối được máy chủ.'

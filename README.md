@@ -39,17 +39,16 @@ Khách chọn cửa hàng, đặt món và thanh toán online (MoMo) hoặc tr�
   feedback-service ─▶ order-service   (kiểm tra đơn đã hoàn thành)
   payment-service ─▶ MoMo sandbox     (tạo giao dịch, nhận IPN, hoàn tiền)
 
-  notification-service :8006 ── Telegram     prometheus :9090 ──▶ grafana :3000
+  prometheus :9090 ──▶ grafana :3000
 ```
 
 | Service | Cổng | Database | Chức năng |
 |---|---|---|---|
-| `auth-service` | 8001 | `auth_db` | Đăng ký, đăng nhập, JWT, quản lý nhân viên, liên kết Telegram |
+| `auth-service` | 8001 | `auth_db` | Đăng ký, đăng nhập, JWT, quản lý nhân viên |
 | `menu-service` | 8002 | `menu_db` | Cửa hàng, danh mục, món ăn, tình trạng còn/hết món |
 | `order-service` | 8003 | `order_db` | Đặt đơn, mã giảm giá, hàng đợi, trạng thái đơn |
 | `payment-service` | 8004 | `payment_db` | Thanh toán MoMo, thu tiền mặt, hoàn tiền |
 | `feedback-service` | 8005 | `feedback_db` | Đánh giá 1–5 sao, thống kê theo cửa hàng |
-| `notification-service` | 8006 | — | Gửi thông báo, khảo sát qua Telegram |
 | `gateway` | **8080** | — | Giao diện web và định tuyến API tới các service |
 | `prometheus` / `grafana` | 9090 / 3000 | — | Thu thập metrics và dashboard giám sát |
 
@@ -79,7 +78,6 @@ PENDING_PAYMENT ──▶ CONFIRMED ──▶ PREPARING ──▶ READY ──�
 | Gateway | nginx |
 | Thanh toán | MoMo sandbox (API v2) |
 | Giám sát | Prometheus, Grafana |
-| Thông báo | Telegram Bot |
 | Đóng gói | Docker, Docker Compose |
 
 ---
@@ -123,8 +121,6 @@ Chỉ tạo file `.env` ở thư mục gốc khi muốn đổi giá trị. File 
 | `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` | Có tài khoản MoMo Business riêng. Để trống = key test công khai |
 | `NGROK_AUTHTOKEN`, `MOMO_IPN_URL`, `MOMO_REDIRECT_URL` | Cho MoMo gọi IPN thật qua internet (xem [mục 5](#5-thanh-toán-momo)) |
 | `PAYMENT_MOCK_MODE=true` | Thanh toán giả, không gọi MoMo (dự phòng khi demo mất mạng) |
-
-**Telegram (không bắt buộc):** copy `telegram-bot/Telegam/SOA_Seminar/.env.example` thành `.env` cùng thư mục và điền token bot. Không có thì hệ thống vẫn chạy, chỉ không gửi được tin Telegram.
 
 ### 3.4. Build và chạy
 
@@ -232,8 +228,10 @@ python -m pytest -q tests
 
 | Service | Lệnh (đứng trong thư mục service) |
 |---|---|
-| `services/payment-service` | `python -m pytest -q tests` |
+| `auth-service` | `python -m pytest -q test_auth.py` |
+| `services/menu-service` | `python -m pytest -q tests` |
 | `services/order-service` | `python -m pytest -q tests` |
+| `services/payment-service` | `python -m pytest -q tests` |
 | `feeback-service` | `python -m pytest -q test_reviews.py` |
 
 Frontend kiểm tra build:
@@ -271,10 +269,9 @@ SOA_FinalReport_DriveThru/
 │   ├── order-service/       # Đơn hàng, mã giảm giá, trạng thái
 │   └── payment-service/     # MoMo, tiền mặt, hoàn tiền
 ├── frontend/                # React + Vite, build ra nginx làm gateway
-├── telegram-bot/            # Bot Telegram và notification-service
 ├── monitoring/              # Cấu hình Prometheus và dashboard Grafana
 ├── init-dbs.sql             # Tạo 5 database khi Postgres khởi động lần đầu
 ├── docker-compose.yml       # Chạy toàn bộ hệ thống
 ├── .env.example             # Mẫu biến môi trường
-└── HUONG_DAN_PHAN_CUA_TAN.md  # Chi tiết phần auth, feedback, Telegram, giám sát
+└── HUONG_DAN_PHAN_CUA_TAN.md  # Chi tiết phần auth, feedback, giám sát
 ```

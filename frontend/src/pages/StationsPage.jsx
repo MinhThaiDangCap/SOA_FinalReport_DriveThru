@@ -9,14 +9,55 @@ import Icon from '../components/Icon.jsx'
 import { formatPrice, STATUS_LABEL } from '../format.js'
 
 const STEPS = [
-  { icon: 'mapPin', title: 'Chọn cửa hàng', text: 'Chọn quán gần bạn, xem menu và thời gian chờ.' },
-  { icon: 'card', title: 'Đặt & trả trước', text: 'Thanh toán MoMo hoặc trả tại quầy khi nhận món.' },
-  { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến", nhân viên nhận diện biển số và giao món.' },
+  { icon: 'mapPin', title: 'Chọn cửa hàng', text: 'Chọn chi nhánh gần tuyến đường của bạn, xem menu và thời gian chờ.' },
+  { icon: 'card', title: 'Đặt & thanh toán', text: 'Thanh toán trực tuyến qua ví MoMo hoặc trả tiền mặt tại quầy.' },
+  { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến" khi vào làn xe, nhân viên mang món ra tận nơi.' },
+]
+
+const BENEFITS = [
+  {
+    icon: 'timer',
+    title: 'Không phải xếp hàng chờ lâu',
+    text: 'Đơn hàng được đưa thẳng vào bếp ngay khi xác nhận, rút ngắn tối đa thời gian dừng đỗ tại làn xe.',
+    tone: 'tone-red',
+  },
+  {
+    icon: 'car',
+    title: 'Giao đúng xe theo biển số',
+    text: 'Mỗi đơn hàng gắn với biển số xe của bạn giúp nhân viên nhận diện chính xác chỉ trong 3 giây.',
+    tone: 'tone-amber',
+  },
+  {
+    icon: 'check',
+    title: 'Luôn nóng hổi khi nhận',
+    text: 'Bếp căn thời gian chế biến hợp lý để thức ăn giữ trọn độ giòn và nóng ngay khi bạn tới quầy.',
+    tone: 'tone-green',
+  },
+  {
+    icon: 'star',
+    title: 'Đánh giá & lắng nghe thật',
+    text: 'Chấm điểm trực tiếp cho từng đơn hoàn thành giúp cửa hàng cải thiện chất lượng mỗi ngày.',
+    tone: 'tone-blue',
+  },
+]
+
+const FAQS = [
+  {
+    q: 'Làm sao nhân viên biết xe tôi đã đến làn nhận món?',
+    a: 'Khi lái xe tới gần cửa hàng, bạn mở chi tiết đơn hàng và bấm nút "Tôi đã đến". Màn hình quầy sẽ lập tức đánh dấu nổi bật biển số xe của bạn để nhân viên mang món ra.',
+  },
+  {
+    q: 'Tôi có thể hủy đơn hoặc đổi phương thức thanh toán không?',
+    a: 'Có. Bạn hoàn toàn có thể hủy đơn hoặc đổi giữa MoMo và Tiền mặt trước khi bếp bắt đầu chế biến món. Nếu đã thanh toán qua MoMo, hệ thống sẽ hoàn tiền tự động về ví.',
+  },
+  {
+    q: 'Món tại cửa hàng hết hàng thì sao?',
+    a: 'Thực đơn hiển thị tình trạng còn/hết theo thời gian thực tại từng chi nhánh, giúp bạn không đặt nhầm món đã hết trong ngày.',
+  },
 ]
 
 const ACTIVE = ['PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'ARRIVED']
 
-/** "06:00 - 23:00" | "24/7" -> đang mở cửa không (theo giờ máy người dùng). null = không rõ. */
 export function isOpenNow(hours, now = new Date()) {
   if (!hours) return null
   if (/24\s*\/\s*7/.test(hours)) return true
@@ -25,7 +66,6 @@ export function isOpenNow(hours, now = new Date()) {
   const open = Number(m[1]) * 60 + Number(m[2])
   const close = Number(m[3]) * 60 + Number(m[4])
   const cur = now.getHours() * 60 + now.getMinutes()
-  // Mở qua đêm, ví dụ 18:00 - 02:00
   return open <= close ? cur >= open && cur < close : cur >= open || cur < close
 }
 
@@ -47,7 +87,7 @@ function ActiveOrders() {
   return (
     <section className="active-orders">
       <h2>Đơn của bạn đang tiến hành</h2>
-      <p className="active-hint">Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món.</p>
+      <p className="active-hint">Theo dõi trạng thái đơn hàng hoặc báo "Tôi đã đến" khi xe tới làn.</p>
       <ul>
         {orders.slice(0, 3).map((o) => (
           <li key={o.id}>
@@ -135,7 +175,6 @@ export default function StationsPage() {
       .then((data) => {
         if (cancelled) return
         setStations(data)
-        // Điểm đánh giá: mỗi quán một request, lỗi thì bỏ qua (không chặn trang)
         Promise.all(
           data.map((s) =>
             getStationStats(s.id)
@@ -159,7 +198,6 @@ export default function StationsPage() {
     return stations
       .filter((s) => !q || `${s.name} ${s.address}`.toLowerCase().includes(q))
       .filter((s) => !onlyOpen || isOpenNow(s.opening_hours) !== false)
-      // Quán đang mở lên trước, rồi quán ít đơn chờ hơn
       .sort((a, b) => {
         const oa = isOpenNow(a.opening_hours) === false ? 1 : 0
         const ob = isOpenNow(b.opening_hours) === false ? 1 : 0
@@ -172,42 +210,70 @@ export default function StationsPage() {
     <>
       <ActiveOrders />
 
+      {/* 1. HERO BANNER CÓ ẢNH CHỤP THỰC TẾ */}
       <section className="hero hero-home">
-        <div>
-          <p className="dash-eyebrow">GoLane · Đặt trước, không cần xuống xe</p>
-          <h1>Đặt trước, lái xe qua, nhận món</h1>
-          <p>
-            Chọn cửa hàng bạn sẽ ghé, đặt món và thanh toán ngay trên web. Tới nơi chỉ cần bấm
-            "Tôi đã đến", món được mang ra tận xe.
+        <div className="hero-content">
+          <span className="hero-pill">🚗 GoLane Drive-Thru · Đặt trước trên Web</span>
+          <h1>Đặt trước, lái xe qua, nhận món nóng hổi tức thì</h1>
+          <p className="hero-desc">
+            Chọn chi nhánh thuận đường nhất, gọi món và thanh toán ngay trên web. Khi tới làn xe,
+            chỉ cần chạm nhẹ <strong>"Tôi đã đến"</strong>, nhân viên sẽ mang bữa ăn ra tận cửa xe.
           </p>
+          <div className="hero-actions">
+            <a href="#stations" className="btn">Chọn cửa hàng & đặt món</a>
+            <a href="#about" className="btn btn-ghost">Tìm hiểu GoLane</a>
+          </div>
+          <div className="hero-stats-row">
+            <div><strong>3+</strong><span>Chi nhánh TP.HCM</span></div>
+            <div><strong>~60s</strong><span>Nhận món tại làn</span></div>
+            <div><strong>100%</strong><span>Nóng hổi tươi mới</span></div>
+          </div>
         </div>
-        <ol className="steps">
-          {STEPS.map((s, i) => (
-            <li key={s.title}>
-              <span className="step-icon">
-                <Icon name={s.icon} size={20} />
-              </span>
-              <div>
-                <strong>{i + 1}. {s.title}</strong>
-                <p>{s.text}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+
+        <div className="hero-visual">
+          <img
+            src="/images/hero-drivethru.jpg"
+            alt="Nhận món trực tiếp tại làn xe GoLane Drive-Thru"
+            className="hero-photo"
+          />
+          <div className="hero-floating-tag">
+            <Icon name="check" size={16} />
+            <span>Nhận diện biển số xe chính xác 100%</span>
+          </div>
+        </div>
       </section>
 
-      <section id="stations">
+      {/* 2. QUY TRÌNH 3 BƯỚC */}
+      <section className="steps-strip">
+        {STEPS.map((s, i) => (
+          <div key={s.title} className="step-pill-card hover-lift">
+            <span className="step-icon">
+              <Icon name={s.icon} size={20} />
+            </span>
+            <div>
+              <strong>{i + 1}. {s.title}</strong>
+              <p>{s.text}</p>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* 3. DANH SÁCH CỬA HÀNG */}
+      <section id="stations" className="home-section">
         <div className="stations-head">
-          <h2>Cửa hàng {stations && <span className="muted">({shown.length})</span>}</h2>
+          <div>
+            <p className="dash-eyebrow">Hệ thống chi nhánh</p>
+            <h2>Chọn cửa hàng gần bạn {stations && <span className="muted">({shown.length})</span>}</h2>
+          </div>
           <div className="stations-filter">
             <label className="search-box">
               <Icon name="search" size={17} />
               <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Tìm theo tên hoặc địa chỉ..."
-              aria-label="Tìm cửa hàng"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Tìm theo tên hoặc địa chỉ..."
+                aria-label="Tìm cửa hàng"
               />
             </label>
             <label className="check">
@@ -245,6 +311,85 @@ export default function StationsPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      {/* 4. ABOUT GOLANE (GIỚI THIỆU THƯƠNG HIỆU + ẢNH BẾP) */}
+      <section id="about" className="home-section about-section">
+        <div className="about-image-box hover-lift">
+          <img
+            src="/images/about-kitchen.jpg"
+            alt="Burger bò phô mai, khoai tây chiên và nước ngọt tươi mới tại bếp GoLane"
+          />
+        </div>
+        <div className="about-content">
+          <p className="dash-eyebrow">About GoLane</p>
+          <h2>Bữa ăn chuẩn vị, sẵn sàng ngay khi xe bạn lăn bánh tới</h2>
+          <p>
+            GoLane ra đời với sứ mệnh giải phóng khách hàng khỏi cảnh xếp hàng dài mệt mỏi tại các
+            cửa hàng đồ ăn nhanh truyền thống. Mỗi phần burger, gà rán và thức uống đều được chế
+            biến tươi mới ngay sau khi bạn đặt trên ứng dụng.
+          </p>
+          <ul className="about-checklist">
+            <li><Icon name="check" size={16} /> Nguyên liệu tươi sạch mỗi ngày, chế biến tại chỗ</li>
+            <li><Icon name="check" size={16} /> Đóng gói chắc chắn, tiện mang theo khi lái xe</li>
+            <li><Icon name="check" size={16} /> Cập nhật tình trạng món còn/hết theo từng chi nhánh</li>
+          </ul>
+          <a href="#stations" className="btn">Đặt món tại chi nhánh gần nhất</a>
+        </div>
+      </section>
+
+      {/* 5. BANNER THỰC ĐƠN NỔI BẬT */}
+      <section id="combo-promo" className="home-section promo-banner">
+        <div className="promo-text">
+          <span className="promo-tag">🔥 Thực đơn bán chạy</span>
+          <h2>Combo Gà Giòn & Burger Phô Mai</h2>
+          <p>
+            Thưởng thức bộ đôi Burger bò nướng phô mai tan chảy, Gà rán giòn rụm cùng Trà đào cam sả
+            mát lạnh. Đặt trước ngay để tiết kiệm tới 15 phút chờ đợi giờ cao điểm!
+          </p>
+          <a href="#stations" className="btn promo-btn">Khám phá thực đơn ngay</a>
+        </div>
+        <div className="promo-img-wrap">
+          <img
+            src="/images/promo-combo.jpg"
+            alt="Combo gà rán, burger phô mai, khoai tây chiên và trà đào GoLane"
+          />
+        </div>
+      </section>
+
+      {/* 6. LÝ DO CHỌN GOLANE */}
+      <section id="why-golane" className="home-section">
+        <div className="section-head">
+          <p className="dash-eyebrow">Trải nghiệm khác biệt</p>
+          <h2>Tại sao khách hàng yêu thích GoLane Drive-Thru?</h2>
+        </div>
+        <div className="benefit-grid">
+          {BENEFITS.map((b) => (
+            <article key={b.title} className={`benefit-card hover-lift ${b.tone}`}>
+              <span className="benefit-icon">
+                <Icon name={b.icon} size={22} />
+              </span>
+              <h3>{b.title}</h3>
+              <p>{b.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* 7. CÂU HỎI THƯỜNG GẶP */}
+      <section id="faq" className="home-section">
+        <div className="section-head">
+          <p className="dash-eyebrow">Giải đáp nhanh</p>
+          <h2>Câu hỏi thường gặp</h2>
+        </div>
+        <div className="faq-grid">
+          {FAQS.map((item) => (
+            <article key={item.q} className="faq-card hover-lift">
+              <h3>{item.q}</h3>
+              <p>{item.a}</p>
+            </article>
+          ))}
+        </div>
       </section>
     </>
   )

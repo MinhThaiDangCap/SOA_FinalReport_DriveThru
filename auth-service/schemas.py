@@ -5,31 +5,26 @@ from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6, description="Mật khẩu tối thiểu 6 ký tự")
+    password: str = Field(..., min_length=6, max_length=72, description="Mật khẩu tối thiểu 6 ký tự")
     full_name: str = Field(..., min_length=2, max_length=100)
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, pattern=r"^0\d{9}$", description="Số điện thoại 10 số bắt đầu bằng 0")
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=6, max_length=72, description="Mật khẩu tối thiểu 6 ký tự")
 
 
 class CreateStaffRequest(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=6, max_length=72)
     full_name: str = Field(..., min_length=2, max_length=100)
-    phone: Optional[str] = None
-    station_id: int = Field(..., description="ID cửa hàng nhân viên phụ trách")
+    phone: Optional[str] = Field(None, pattern=r"^0\d{9}$")
+    station_id: int = Field(..., ge=1, description="ID cửa hàng nhân viên phụ trách")
 
 
 class RefreshRequest(BaseModel):
     refresh_token: str
-
-
-class TelegramBindRequest(BaseModel):
-    token: str = Field(..., description="Token một lần từ lệnh /start <token>")
-    chat_id: str = Field(..., description="Telegram chat_id của khách hàng")
 
 
 class UserResponse(BaseModel):
@@ -39,7 +34,6 @@ class UserResponse(BaseModel):
     phone: Optional[str]
     role: str
     station_id: Optional[int]
-    telegram_chat_id: Optional[str] = None
     is_active: bool
     created_at: datetime
 
@@ -52,10 +46,3 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
-
-
-class TelegramLinkResponse(BaseModel):
-    link_token: str
-    bot_username: str
-    telegram_url: str
-

@@ -4,7 +4,7 @@ from database import Base
 
 
 class Review(Base):
-    """Bảng 'reviews' lưu đánh giá từ Web và từ Telegram Bot trong feedback_db"""
+    """Bảng 'reviews' lưu đánh giá dịch vụ của khách hàng trong feedback_db"""
     __tablename__ = "reviews"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -24,7 +24,7 @@ class Review(Base):
     # Nội dung góp ý (Bắt buộc nếu rating là 1 hoặc 2 sao)
     comment = Column(Text, nullable=True)
 
-    # Nguồn đánh giá: "web" hoặc "telegram"
+    # Nguồn đánh giá
     source = Column(String(20), default="web", nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
