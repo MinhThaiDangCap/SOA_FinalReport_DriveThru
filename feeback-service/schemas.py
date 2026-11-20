@@ -27,7 +27,6 @@ class ReviewResponse(BaseModel):
     station_id: int
     rating: int
     comment: Optional[str]
-    source: str
     created_at: datetime
 
     class Config:

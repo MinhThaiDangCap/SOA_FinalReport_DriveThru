@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, Integer, Text, DateTime
 from database import Base
 
 
@@ -23,8 +23,5 @@ class Review(Base):
 
     # Nội dung góp ý (Bắt buộc nếu rating là 1 hoặc 2 sao)
     comment = Column(Text, nullable=True)
-
-    # Nguồn đánh giá: hiện chỉ có "web" (dữ liệu cũ có thể còn "telegram")
-    source = Column(String(20), default="web", nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

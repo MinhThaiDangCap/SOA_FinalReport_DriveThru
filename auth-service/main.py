@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter
@@ -114,10 +115,25 @@ def seed_default_accounts():
         db.close()
 
 
+def drop_removed_columns():
+    """Database tạo trước khi bỏ Telegram còn 2 cột liên kết Telegram: xóa đi.
+
+    Chạy mỗi lần khởi động nhưng an toàn (IF EXISTS). Index của cột bị xóa theo.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE users DROP COLUMN IF EXISTS telegram_chat_id, "
+            "DROP COLUMN IF EXISTS telegram_link_token"
+        ))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
+        drop_removed_columns()
         seed_default_accounts()
         logger.info(">>> Kết nối auth_db và tạo bảng thành công!")
     except Exception as e:
