@@ -1,11 +1,10 @@
 # 📘 TÀI LIỆU HƯỚNG DẪN & BÁO CÁO PHẦN CỦA TÂN (THÀNH VIÊN C)
 
 Tài liệu này tổng hợp toàn bộ phần công việc của **Tân (Người C)** trong đồ án **Hệ thống Đặt món Drive-Thru (Kiến trúc Microservices - 504070)**, bao gồm:
-1. **`auth-service`** (Xác thực, Phân quyền JWT, Quản lý Nhân viên, Liên kết Telegram).
-2. **`feeback-service`** (Đánh giá dịch vụ 1–5 sao, Kiểm tra đơn hàng, Thống kê Admin, Đồng bộ Telegram).
-3. **`telegram-bot` & `notification-service`** (Tích hợp từ dự án Seminar: Nhận `/start <token>`, gửi thông báo trạng thái đơn, gửi khảo sát 5 sao và lưu thẳng vào `feedback_db`).
-4. **Giám sát hệ thống (`Prometheus` + `Grafana`)** (Tự động thu thập `/metrics` và dựng sẵn Dashboard 6 biểu đồ).
-5. **Giao diện Frontend (`Dashboard Nhân viên & Admin`)** (React + Vite).
+1. **`auth-service`** (Xác thực, Phân quyền JWT, Quản lý Nhân viên).
+2. **`feeback-service`** (Đánh giá dịch vụ 1–5 sao trên web, Kiểm tra đơn hàng, Thống kê Admin).
+3. **Giám sát hệ thống (`Prometheus` + `Grafana`)** (Tự động thu thập `/metrics` và dựng sẵn Dashboard 6 biểu đồ).
+4. **Giao diện Frontend (`Dashboard Nhân viên & Admin`)** (React + Vite).
 
 ---
 
@@ -15,8 +14,6 @@ Tài liệu này tổng hợp toàn bộ phần công việc của **Tân (Ngư�
 | :--- | :---: | :---: | :--- |
 | **`auth-service`** | `8001` | `auth_db` | `users`, `refresh_tokens` |
 | **`feeback-service`** | `8005` | `feedback_db` | `reviews` |
-| **`notification-service`** | `8006` | *(Stateless)* | Gửi thông báo & khảo sát qua Telegram API |
-| **`telegram-bot` (Java)** | *(Polling)* | *(Gọi REST)* | Nhận `/start <token>` và phiếu khảo sát 5 sao |
 | **`prometheus`** | `9090` | *(Time-series)* | Thu thập `/metrics` mỗi 15 giây |
 | **`grafana`** | `3000` | *(Provisioned)* | Dashboard tự động nạp sẵn |
 | **`frontend`** | `5173` | — | Giao diện Nhân viên, Admin, Khách hàng |
@@ -54,7 +51,6 @@ docker compose up -d --build
 Sau khi chạy xong, mở trình duyệt tại:
 - **Swagger Auth Service**: [http://localhost:8001/docs](http://localhost:8001/docs)
 - **Swagger Feedback Service**: [http://localhost:8005/docs](http://localhost:8005/docs)
-- **Swagger Notification Service**: [http://localhost:8006/docs](http://localhost:8006/docs)
 - **Prometheus**: [http://localhost:9090](http://localhost:9090)
 - **Grafana Dashboard**: [http://localhost:3000](http://localhost:3000) (Đăng nhập: `admin` / `admin` → Vào mục **Dashboards** → Mở **Drive-Thru Microservices & Business Monitoring**)
 
@@ -69,3 +65,12 @@ npm run dev
 
 ---
 
+
+---
+
+## Ghi chú: đã bỏ Telegram
+
+Bot Telegram (gửi phiếu đánh giá, liên kết tài khoản) và `notification-service` đã được gỡ khỏi dự án:
+khách đánh giá trực tiếp trên trang đơn hàng của web, nên kênh Telegram bị trùng chức năng.
+Đánh giá 1–2 sao vẫn được theo dõi qua trang Quản trị (tab Đánh giá) và Grafana
+(metric `negative_reviews_total`).

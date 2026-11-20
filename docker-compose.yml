@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. Auth Service (Đăng ký, Đăng nhập, JWT, Nhân viên, Liên kết Telegram)
+  # 2. Auth Service (Đăng ký, Đăng nhập, JWT, Nhân viên)
   auth-service:
     build: ./auth-service
     container_name: drivethru_auth
@@ -31,14 +31,13 @@ services:
       AUTH_DB: auth_db
       JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
       INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
-      BOT_USERNAME: ${BOT_USERNAME:-DriveThruSOABot}
     ports:
       - "8001:8000"
     depends_on:
       postgres:
         condition: service_healthy
 
-  # 3. Feedback Service (Đánh giá 1-5 sao, Thống kê Admin, Đồng bộ Telegram)
+  # 3. Feedback Service (Đánh giá 1-5 sao, Thống kê Admin)
   feedback-service:
     build: ./feeback-service
     container_name: drivethru_feedback
@@ -51,9 +50,7 @@ services:
       FEEDBACK_DB: feedback_db
       JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
       INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
-      SERVICE_API_KEY: ${SERVICE_API_KEY:-my-secret-key}
       ORDER_SERVICE_URL: http://order-service:8000
-      NOTIFICATION_SERVICE_URL: http://notification-service:8000
       ORDER_SERVICE_FALLBACK: "false"
     ports:
       - "8005:8000"
@@ -165,21 +162,7 @@ services:
     depends_on:
       - gateway
 
-  # 4. Notification Service (Gửi thông báo & khảo sát Telegram)
-  notification-service:
-    build: ./telegram-bot/Telegam/SOA_Seminar/notification-service
-    container_name: drivethru_notification
-    restart: always
-    env_file:
-      - path: ./telegram-bot/Telegam/SOA_Seminar/.env
-        required: false
-    environment:
-      SERVICE_API_KEY: ${SERVICE_API_KEY:-my-secret-key}
-      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
-    ports:
-      - "8006:8000"
-
-  # 5. Prometheus (Thu thập metrics từ toàn bộ microservices)
+  # 4. Prometheus (Thu thập metrics từ toàn bộ microservices)
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: drivethru_prometheus
@@ -189,7 +172,7 @@ services:
     ports:
       - "9090:9090"
 
-  # 6. Grafana (Dashboard giám sát tự động nạp sẵn)
+  # 5. Grafana (Dashboard giám sát tự động nạp sẵn)
   grafana:
     image: grafana/grafana:10.4.1
     container_name: drivethru_grafana

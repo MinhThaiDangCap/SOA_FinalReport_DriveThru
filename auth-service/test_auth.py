@@ -57,7 +57,7 @@ def test_register_and_login_flow():
     assert reg_res.status_code == 201
     user_data = reg_res.json()
     assert user_data["email"] == "testuser@drivethru.vn"
-    assert user_data["role"] == "customer"
+    assert user_data["role"] == "CUSTOMER"
 
     # 2. Đăng nhập
     login_res = client.post(
@@ -85,36 +85,29 @@ def test_register_and_login_flow():
     assert "access_token" in ref_res.json()
 
 
-def test_telegram_link_and_bind():
-    # Đăng ký & đăng nhập
-    client.post(
+def test_internal_user_lookup_requires_key():
+    reg = client.post(
         "/api/auth/register",
         json={
-            "email": "tele@drivethru.vn",
+            "email": "internal@drivethru.vn",
             "password": "Password123",
-            "full_name": "Tele User",
+            "full_name": "Internal User",
         },
     )
-    login_res = client.post(
-        "/api/auth/login",
-        json={"email": "tele@drivethru.vn", "password": "Password123"},
-    )
-    token = login_res.json()["access_token"]
+    user_id = reg.json()["id"]
 
-    # Tạo link token
-    link_res = client.post(
-        "/api/auth/telegram/link-token",
-        headers={"Authorization": f"Bearer {token}"},
+    # Service khác gọi kèm X-Internal-Key thì lấy được thông tin user
+    ok = client.get(
+        f"/internal/auth/users/{user_id}", headers={"X-Internal-Key": INTERNAL_KEY}
     )
-    assert link_res.status_code == 200
-    link_token = link_res.json()["link_token"]
+    assert ok.status_code == 200
+    assert ok.json()["email"] == "internal@drivethru.vn"
+    assert "telegram_chat_id" not in ok.json()
 
-    # Gọi internal bind từ Telegram bot
-    bind_res = client.post(
-        "/internal/auth/telegram/bind",
-        json={"token": link_token, "chat_id": "987654321"},
-        headers={"X-Internal-Key": INTERNAL_KEY},
-    )
-    assert bind_res.status_code == 200
-    assert bind_res.json()["telegram_chat_id"] == "987654321"
+    # Thiếu key nội bộ thì bị chặn
+    assert client.get(f"/internal/auth/users/{user_id}").status_code in (401, 403)
 
+
+def test_telegram_endpoints_removed():
+    assert client.post("/api/auth/telegram/link-token").status_code == 404
+    assert client.post("/internal/auth/telegram/bind", json={}).status_code == 404

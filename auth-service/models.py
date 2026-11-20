@@ -19,10 +19,6 @@ class User(Base):
     # ID cửa hàng dành cho nhân viên (staff)
     station_id = Column(Integer, nullable=True)
 
-    # Liên kết Telegram (dành cho thông báo & khảo sát qua Bot)
-    telegram_chat_id = Column(String(50), nullable=True, index=True)
-    telegram_link_token = Column(String(100), nullable=True, unique=True, index=True)
-
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

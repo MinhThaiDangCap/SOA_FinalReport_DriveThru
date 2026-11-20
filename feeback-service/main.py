@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import jwt
-from fastapi import FastAPI, Depends, HTTPException, status, Header, Query, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, status, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -13,7 +13,7 @@ from prometheus_client import Counter
 
 from database import engine, Base, SessionLocal, get_db
 from models import Review
-from schemas import ReviewCreate, TelegramReviewCreate, ReviewResponse, StationStatsResponse
+from schemas import ReviewCreate, ReviewResponse, StationStatsResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("feedback-service")
@@ -21,10 +21,8 @@ logger = logging.getLogger("feedback-service")
 JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_jwt_key_drivethru_2026")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 INTERNAL_KEY = os.getenv("INTERNAL_KEY", "change_me_internal_key")
-SERVICE_API_KEY = os.getenv("SERVICE_API_KEY", "my-secret-key")
 
 ORDER_SERVICE_URL = os.getenv("ORDER_SERVICE_URL", "http://order-service:8000")
-NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL", "http://notification-service:8000")
 # Cho phép chạy độc lập khi order-service của bạn A chưa bật (đặt false khi tích hợp thật)
 ORDER_SERVICE_FALLBACK = os.getenv("ORDER_SERVICE_FALLBACK", "true").lower() == "true"
 
@@ -61,7 +59,7 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=4,
                     comment="Burger bò phô mai nóng hổi, khoai tây giòn.",
-                    source="telegram",
+                    source="web",
                 ),
                 Review(
                     order_id=1003,
@@ -77,7 +75,7 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=1,
                     comment="Giao thiếu 1 gói tương ớt và khăn giấy dù đã ghi chú.",
-                    source="telegram",
+                    source="web",
                 ),
                 Review(
                     order_id=1005,
@@ -118,7 +116,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GoLane Feedback Service",
-    description="Dịch vụ Đánh giá đơn hàng và Thống kê chất lượng cửa hàng (Web & Telegram Bot)",
+    description="Dịch vụ Đánh giá đơn hàng và Thống kê chất lượng cửa hàng",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -192,30 +190,6 @@ def fetch_order_from_order_service(order_id: int, fallback_customer_id: int, fal
         )
 
 
-def send_negative_review_alert(review: Review):
-    """Gửi cảnh báo ngầm sang notification-service (Telegram) khi khách đánh giá 1-2 sao."""
-    if review.rating > 2:
-        return
-    try:
-        url = f"{NOTIFICATION_SERVICE_URL}/notify"
-        headers = {"X-API-Key": SERVICE_API_KEY}
-        payload = {
-            "service": "feedback-service",
-            "level": "WARNING",
-            "title": f"Cảnh báo đánh giá thấp ({review.rating} sao) tại Trạm #{review.station_id}",
-            "message": (
-                f"Đơn hàng: #{review.order_id}\n"
-                f"Khách hàng ID: {review.customer_id}\n"
-                f"Số sao: {review.rating}/5 ⭐\n"
-                f"Lý do: {review.comment or 'Không có'}"
-            ),
-        }
-        with httpx.Client(timeout=5.0) as client:
-            client.post(url, json=payload, headers=headers)
-    except Exception as e:
-        logger.warning(f"Không gửi được cảnh báo Telegram (không làm ảnh hưởng đánh giá): {e}")
-
-
 # ===== 1. KHÁCH HÀNG GỬI ĐÁNH GIÁ TRÊN WEB =====
 @app.post(
     "/api/reviews",
@@ -226,7 +200,6 @@ def send_negative_review_alert(review: Review):
 )
 def create_review(
     req: ReviewCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     user_payload: dict = Depends(get_current_user),
 ):
@@ -274,7 +247,7 @@ def create_review(
     db.commit()
     db.refresh(new_review)
 
-    # 4. Cập nhật Prometheus Metrics & bắn cảnh báo Telegram nếu 1-2 sao
+    # 4. Cập nhật Prometheus Metrics (Grafana theo dõi đánh giá 1-2 sao)
     REVIEWS_CREATED_TOTAL.labels(
         station_id=str(station_id),
         rating=str(req.rating),
@@ -282,57 +255,11 @@ def create_review(
     ).inc()
     if req.rating <= 2:
         NEGATIVE_REVIEWS_TOTAL.labels(station_id=str(station_id)).inc()
-        background_tasks.add_task(send_negative_review_alert, new_review)
 
     return new_review
 
 
-# ===== 2. INTERNAL API: NHẬN ĐÁNH GIÁ TỪ TELEGRAM BOT =====
-@app.post(
-    "/internal/reviews/telegram",
-    response_model=ReviewResponse,
-    status_code=status.HTTP_201_CREATED,
-    tags=["Internal (Telegram Bot)"],
-    summary="[Internal] Lưu kết quả khảo sát từ Telegram Bot vào feedback_db",
-)
-def create_review_from_telegram(
-    req: TelegramReviewCreate,
-    db: Session = Depends(get_db),
-    _ok: bool = Depends(verify_internal_key),
-):
-    existing = db.query(Review).filter(Review.order_id == req.order_id).first()
-    if existing:
-        existing.rating = req.rating
-        existing.comment = req.comment
-        existing.source = "telegram"
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    new_review = Review(
-        order_id=req.order_id,
-        customer_id=req.customer_id or 1,
-        station_id=req.station_id or 1,
-        rating=req.rating,
-        comment=req.comment,
-        source="telegram",
-    )
-    db.add(new_review)
-    db.commit()
-    db.refresh(new_review)
-
-    REVIEWS_CREATED_TOTAL.labels(
-        station_id=str(new_review.station_id),
-        rating=str(req.rating),
-        source="telegram",
-    ).inc()
-    if req.rating <= 2:
-        NEGATIVE_REVIEWS_TOTAL.labels(station_id=str(new_review.station_id)).inc()
-
-    return new_review
-
-
-# ===== 3. ADMIN XEM THỐNG KÊ SAO & GÓP Ý TIÊU CỰC THEO CỬA HÀNG =====
+# ===== 2. ADMIN XEM THỐNG KÊ SAO & GÓP Ý TIÊU CỰC THEO CỬA HÀNG =====
 @app.get(
     "/api/reviews/stations/{station_id}/stats",
     response_model=StationStatsResponse,
@@ -375,7 +302,7 @@ def get_station_stats(station_id: int, db: Session = Depends(get_db)):
     )
 
 
-# ===== 4. DANH SÁCH ĐÁNH GIÁ CỦA CỬA HÀNG =====
+# ===== 3. DANH SÁCH ĐÁNH GIÁ CỦA CỬA HÀNG =====
 @app.get(
     "/api/reviews/stations/{station_id}",
     response_model=List[ReviewResponse],
@@ -393,7 +320,7 @@ def list_station_reviews(
     return q.order_by(Review.created_at.desc()).all()
 
 
-# ===== 5. KIỂM TRA ĐƠN HÀNG ĐÃ ĐÁNH GIÁ CHƯA =====
+# ===== 4. KIỂM TRA ĐƠN HÀNG ĐÃ ĐÁNH GIÁ CHƯA =====
 @app.get(
     "/api/reviews/orders/{order_id}",
     response_model=Optional[ReviewResponse],

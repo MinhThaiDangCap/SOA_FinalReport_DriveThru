@@ -90,7 +90,7 @@ export default function ReviewsPanel({ stationId }) {
               <div className="review-list-head">
                 <StarRow value={r.rating} size={15} />
                 <span className="muted">
-                  Đơn #{r.order_id} · {formatDateTime(r.created_at)} · {r.source === 'telegram' ? 'Telegram' : 'Web'}
+                  Đơn #{r.order_id} · {formatDateTime(r.created_at)}
                 </span>
               </div>
               {r.comment && <p>{r.comment}</p>}

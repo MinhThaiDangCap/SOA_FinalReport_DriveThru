@@ -27,11 +27,6 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
-class TelegramBindRequest(BaseModel):
-    token: str = Field(..., description="Token một lần từ lệnh /start <token>")
-    chat_id: str = Field(..., description="Telegram chat_id của khách hàng")
-
-
 class UserResponse(BaseModel):
     id: int
     email: str
@@ -39,7 +34,6 @@ class UserResponse(BaseModel):
     phone: Optional[str]
     role: str
     station_id: Optional[int]
-    telegram_chat_id: Optional[str] = None
     is_active: bool
     created_at: datetime
 
@@ -52,10 +46,3 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
-
-
-class TelegramLinkResponse(BaseModel):
-    link_token: str
-    bot_username: str
-    telegram_url: str
-

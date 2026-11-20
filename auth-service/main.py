@@ -17,10 +17,8 @@ from schemas import (
     LoginRequest,
     CreateStaffRequest,
     RefreshRequest,
-    TelegramBindRequest,
     UserResponse,
     TokenResponse,
-    TelegramLinkResponse,
 )
 from security import (
     hash_password,
@@ -33,8 +31,6 @@ from security import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("auth-service")
-
-BOT_USERNAME = os.getenv("BOT_USERNAME", "DriveThruSOABot")
 
 # Custom Prometheus Business Metrics
 AUTH_LOGINS_TOTAL = Counter(
@@ -131,7 +127,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GoLane Auth Service",
-    description="Dịch vụ Đăng ký, Đăng nhập, Phân quyền JWT và Liên kết Telegram Bot",
+    description="Dịch vụ Đăng ký, Đăng nhập, Phân quyền JWT và Quản lý nhân viên",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -367,72 +363,12 @@ def toggle_staff_status(
     return staff
 
 
-# ===== 6. LIÊN KẾT TÀI KHOẢN VỚI TELEGRAM BOT =====
-@app.post(
-    "/api/auth/telegram/link-token",
-    response_model=TelegramLinkResponse,
-    tags=["Telegram Integration"],
-    summary="Tạo token một lần và đường link kết nối Telegram cho khách hàng",
-)
-def generate_telegram_link(
-    current_payload: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    user_id = int(current_payload.get("sub"))
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
-
-    # Tạo token ngắn gọn để truyền qua /start <token> (Telegram giới hạn 64 ký tự)
-    link_token = f"USR{user.id}_{generate_random_token(12)}"
-    user.telegram_link_token = link_token
-    db.commit()
-
-    telegram_url = f"https://t.me/{BOT_USERNAME}?start={link_token}"
-    return TelegramLinkResponse(
-        link_token=link_token,
-        bot_username=BOT_USERNAME,
-        telegram_url=telegram_url,
-    )
-
-
-# ===== 7. INTERNAL APIs (CHỈ CÁC MICROSERVICE GỌI NỘI BỘ) =====
-@app.post(
-    "/internal/auth/telegram/bind",
-    tags=["Internal Service-to-Service"],
-    summary="[Internal] Bot Telegram gọi để gắn chat_id vào tài khoản web khi khách bấm /start <token>",
-)
-def bind_telegram_chat_id(
-    req: TelegramBindRequest,
-    db: Session = Depends(get_db),
-    _ok: bool = Depends(verify_internal_key),
-):
-    user = db.query(User).filter(User.telegram_link_token == req.token).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Mã liên kết Telegram không hợp lệ hoặc đã được sử dụng.",
-        )
-
-    user.telegram_chat_id = str(req.chat_id)
-    user.telegram_link_token = None  # Xóa token một lần sau khi đã gắn thành công
-    db.commit()
-    db.refresh(user)
-
-    return {
-        "status": "linked",
-        "user_id": user.id,
-        "email": user.email,
-        "full_name": user.full_name,
-        "telegram_chat_id": user.telegram_chat_id,
-    }
-
-
+# ===== 6. INTERNAL APIs (CHỈ CÁC MICROSERVICE GỌI NỘI BỘ) =====
 @app.get(
     "/internal/auth/users/{user_id}",
     response_model=UserResponse,
     tags=["Internal Service-to-Service"],
-    summary="[Internal] Lấy thông tin user và telegram_chat_id từ order-service / feedback-service",
+    summary="[Internal] Lấy thông tin user cho order-service / feedback-service",
 )
 def get_user_internal(
     user_id: int,
