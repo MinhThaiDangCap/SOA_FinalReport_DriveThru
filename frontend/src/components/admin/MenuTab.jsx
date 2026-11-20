@@ -10,6 +10,7 @@ import {
   updateCategory,
   updateItem,
 } from '../../api/menu.js'
+import { categoryStyle } from '../../categoryStyle.js'
 import { formatPrice } from '../../format.js'
 import Icon from '../Icon.jsx'
 
@@ -189,6 +190,7 @@ export default function MenuTab() {
           </button>
           {categories.map((c) => (
             <button key={c.id} type="button" className={filter === c.id ? 'tab active' : 'tab'} onClick={() => setFilter(c.id)}>
+              <Icon name={categoryStyle(c.name).icon} size={16} />
               {c.name}
             </button>
           ))}
@@ -217,7 +219,13 @@ export default function MenuTab() {
             ) : (
               <div className={`admin-row${item.is_active ? '' : ' row-off'}`}>
                 <div className="admin-item">
-                  {item.image_url ? <img src={item.image_url} alt="" /> : <span className="admin-thumb"><Icon name="utensils" size={22} /></span>}
+                  {item.image_url ? (
+                    <img src={item.image_url} alt="" />
+                  ) : (
+                    <span className={`admin-thumb tone-${categoryStyle(catName[item.category_id]).tone}`}>
+                      <Icon name={categoryStyle(catName[item.category_id]).icon} size={24} />
+                    </span>
+                  )}
                   <div>
                     <strong>{item.name}</strong> · {formatPrice(item.price)}
                     {!item.is_active && <span className="tag-bad"> ngừng bán</span>}

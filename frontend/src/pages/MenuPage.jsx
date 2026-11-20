@@ -6,6 +6,7 @@ import { getStationMenu } from '../api/menu.js'
 import CartPanel from '../components/CartPanel.jsx'
 import Icon from '../components/Icon.jsx'
 import MenuItemCard from '../components/MenuItemCard.jsx'
+import { categoryStyle } from '../categoryStyle.js'
 import { useCart } from '../context/CartContext.jsx'
 
 // Tải lại menu định kỳ để thấy món nhân viên vừa báo hết
@@ -97,10 +98,14 @@ export default function MenuPage() {
         <Link to="/" className="back-link"><Icon name="arrowLeft" size={16} /> Đổi cửa hàng</Link>
         <div className="station-header">
           <h1>{menu.station.name}</h1>
-          <p className="with-icon"><Icon name="mapPin" size={16} /> {menu.station.address}</p>
-          {menu.station.opening_hours && (
-            <p className="with-icon"><Icon name="clock" size={16} /> Giờ mở cửa: {menu.station.opening_hours}</p>
-          )}
+          <div className="station-meta">
+            <p className="with-icon"><Icon name="mapPin" size={16} /> {menu.station.address}</p>
+            {menu.station.opening_hours && (
+              <p className="with-icon">
+                <Icon name="clock" size={16} /> Giờ mở cửa: {menu.station.opening_hours}
+              </p>
+            )}
+          </div>
         </div>
 
         {menu.categories.length === 0 ? (
@@ -120,6 +125,7 @@ export default function MenuPage() {
                   className={activeCategory === c.id ? 'tab active' : 'tab'}
                   onClick={() => setActiveCategory(c.id)}
                 >
+                  <Icon name={categoryStyle(c.name).icon} size={17} />
                   {c.name}
                 </button>
               ))}
@@ -127,12 +133,19 @@ export default function MenuPage() {
 
             {visibleCategories.map((category) => (
               <section key={category.id} className="category-section">
-                <h2>{category.name}</h2>
+                <h2 className="category-title">
+                  <span className={`category-icon tone-${categoryStyle(category.name).tone}`}>
+                    <Icon name={categoryStyle(category.name).icon} size={20} />
+                  </span>
+                  {category.name}
+                  <small>{category.items.length} món</small>
+                </h2>
                 <div className="item-grid">
                   {category.items.map((item) => (
                     <MenuItemCard
                       key={item.id}
                       item={item}
+                      category={category.name}
                       quantity={quantityById[item.id] || 0}
                       onAdd={() => handleAdd(item)}
                       onSetQuantity={(q) => setQuantity(item.id, q)}

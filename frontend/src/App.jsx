@@ -32,13 +32,15 @@ export default function App() {
           <span className="brand-mark" aria-hidden="true">
             <Icon name="car" size={20} strokeWidth={2} />
           </span>
-          GoLane
+          <span className="brand-text">GoLane</span>
         </Link>
 
         <nav className="topbar-nav">
           {user?.role === 'CUSTOMER' && cart.stationId && totalQuantity > 0 && (
-            <Link to={`/stations/${cart.stationId}`} className="topbar-cart">
-              Giỏ hàng <span className="badge">{totalQuantity}</span>
+            <Link to={`/stations/${cart.stationId}`} className="topbar-cart" aria-label={`Giỏ hàng (${totalQuantity})`}>
+              <Icon name="bag" size={18} />
+              <span className="topbar-cart-text">Giỏ hàng</span>
+              <span key={totalQuantity} className="badge badge-bump">{totalQuantity}</span>
             </Link>
           )}
           {user?.role === 'CUSTOMER' && (
@@ -53,8 +55,14 @@ export default function App() {
           {user ? (
             <>
               <span className="topbar-user">{user.full_name}</span>
-              <button type="button" className="btn btn-ghost btn-small" onClick={logout}>
-                Đăng xuất
+              <button
+                type="button"
+                className="btn btn-ghost btn-small topbar-logout"
+                onClick={logout}
+                aria-label="Đăng xuất"
+              >
+                <Icon name="logout" size={18} />
+                <span className="btn-text">Đăng xuất</span>
               </button>
             </>
           ) : (

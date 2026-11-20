@@ -14,6 +14,14 @@ const STEPS = [
   { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến", nhân viên nhận diện biển số và giao món.' },
 ]
 
+// Các món "bay" quanh hình xe ở phần đầu trang
+const HERO_FOODS = [
+  { icon: 'burger', tone: 'burger' },
+  { icon: 'cup', tone: 'drinks' },
+  { icon: 'fries', tone: 'sides' },
+  { icon: 'iceCream', tone: 'dessert' },
+]
+
 const ACTIVE = ['PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'ARRIVED']
 
 /** "06:00 - 23:00" | "24/7" -> đang mở cửa không (theo giờ máy người dùng). null = không rõ. */
@@ -172,29 +180,44 @@ export default function StationsPage() {
     <>
       <ActiveOrders />
 
-      <section className="hero hero-home">
-        <div>
-          <p className="dash-eyebrow">GoLane · Đặt trước, không cần xuống xe</p>
+      <section className="hero-banner">
+        <div className="hero-copy">
+          <p className="hero-eyebrow">GoLane · Đặt trước, không cần xuống xe</p>
           <h1>Đặt trước, lái xe qua, nhận món</h1>
-          <p>
+          <p className="hero-lead">
             Chọn cửa hàng bạn sẽ ghé, đặt món và thanh toán ngay trên web. Tới nơi chỉ cần bấm
             "Tôi đã đến", món được mang ra tận xe.
           </p>
+          <a href="#stations" className="btn btn-accent">
+            Chọn cửa hàng <Icon name="arrowRight" size={18} strokeWidth={2.2} />
+          </a>
         </div>
-        <ol className="steps">
-          {STEPS.map((s, i) => (
-            <li key={s.title}>
-              <span className="step-icon">
-                <Icon name={s.icon} size={20} />
-              </span>
-              <div>
-                <strong>{i + 1}. {s.title}</strong>
-                <p>{s.text}</p>
-              </div>
-            </li>
+        <div className="hero-art" aria-hidden="true">
+          <span className="hero-car">
+            <Icon name="car" size={92} strokeWidth={1.4} />
+          </span>
+          {HERO_FOODS.map((f, i) => (
+            <span key={f.icon} className={`hero-food hero-food-${i + 1} tone-${f.tone}`}>
+              <Icon name={f.icon} size={30} strokeWidth={1.6} />
+            </span>
           ))}
-        </ol>
+        </div>
       </section>
+
+      <ol className="steps-row">
+        {STEPS.map((s, i) => (
+          <li key={s.title}>
+            <span className="step-icon">
+              <Icon name={s.icon} size={22} />
+              <span className="step-num">{i + 1}</span>
+            </span>
+            <div>
+              <strong>{s.title}</strong>
+              <p>{s.text}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
 
       <section id="stations">
         <div className="stations-head">
