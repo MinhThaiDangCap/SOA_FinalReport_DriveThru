@@ -14,9 +14,13 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     # create_all không thêm cột vào bảng đã có: thêm tay cột mới cho database cũ
     with engine.begin() as conn:
-        conn.execute(
-            text("ALTER TABLE orders ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMPTZ")
-        )
+        for sql in (
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS arrived_at TIMESTAMPTZ",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS prep_minutes INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_ready_at TIMESTAMPTZ",
+            "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS prep_minutes INTEGER NOT NULL DEFAULT 3",
+        ):
+            conn.execute(text(sql))
     yield
 
 

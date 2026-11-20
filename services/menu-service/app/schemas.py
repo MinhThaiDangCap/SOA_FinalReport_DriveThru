@@ -18,6 +18,7 @@ class StationIn(BaseModel):
     address: str = Field(min_length=1, max_length=255)
     opening_hours: str | None = Field(default=None, max_length=50)
     is_active: bool = True
+    kitchen_capacity: int = Field(default=2, ge=1, le=20)
 
     _name = field_validator("name", "address")(_strip)
     _hours = field_validator("opening_hours")(_strip_or_none)
@@ -31,6 +32,7 @@ class StationOut(BaseModel):
     address: str
     opening_hours: str | None
     is_active: bool
+    kitchen_capacity: int
 
 
 # ---------- Category ----------
@@ -56,6 +58,7 @@ class MenuItemIn(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     price: int = Field(ge=0, le=10_000_000)  # VND
     image_url: str | None = Field(default=None, max_length=500)
+    prep_minutes: int = Field(default=3, ge=1, le=60)
     is_active: bool = True
 
     _name = field_validator("name")(_strip)
@@ -71,6 +74,7 @@ class MenuItemOut(BaseModel):
     description: str | None
     price: int
     image_url: str | None
+    prep_minutes: int
     is_active: bool
     created_at: datetime
 
@@ -113,3 +117,4 @@ class InternalItemOut(BaseModel):
     name: str
     price: int
     available: bool
+    prep_minutes: int

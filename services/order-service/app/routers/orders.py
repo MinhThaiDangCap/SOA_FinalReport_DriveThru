@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 from app import payment_client
 from app.coupons import apply_coupon
 from app.database import get_db
-from app.menu_client import get_menu_items
+from app.estimate import (
+    DEFAULT_KITCHEN_CAPACITY,
+    TYPICAL_ORDER_MINUTES,
+    backlog_minutes,
+    order_prep_minutes,
+    set_estimate,
+    wait_minutes,
+)
+from app.menu_client import get_kitchen_capacities, get_menu_items
 from app.models import Order, OrderItem, OrderStatus, OrderStatusHistory
 from app.schemas import (
     OrderCreate,
@@ -46,6 +54,12 @@ def get_order_or_404(db: Session, order_id: int, lock: bool = False) -> Order:
     if order is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     return order
+
+
+def update_estimate(db: Session, order: Order) -> None:
+    """Tính lại giờ xong dự kiến, lấy số đơn bếp làm cùng lúc từ menu-service."""
+    capacity = get_kitchen_capacities().get(order.station_id, DEFAULT_KITCHEN_CAPACITY)
+    set_estimate(db, order, capacity)
 
 
 def ensure_staff_station(user: dict, order: Order) -> None:
@@ -91,6 +105,7 @@ def create_order(
                 item_name=m["name"],
                 unit_price=m["price"],
                 quantity=qty,
+                prep_minutes=m.get("prep_minutes", 3),
             )
         )
 
@@ -115,6 +130,9 @@ def create_order(
         discount_amount=discount,
         total_amount=subtotal - discount,
         coupon_code=coupon_code,
+        prep_minutes=order_prep_minutes(
+            [(it.prep_minutes, it.quantity) for it in order_items]
+        ),
     )
     order.items = order_items
     order.history.append(
@@ -124,6 +142,7 @@ def create_order(
     )
 
     db.add(order)
+    update_estimate(db, order)
     db.commit()
     db.refresh(order)
 
@@ -167,27 +186,31 @@ def station_queue(
 
 
 # ---------- Công khai: độ đông của từng cửa hàng (trang chủ) ----------
-# Ước tính đơn giản: mỗi đơn đang chờ thêm khoảng 3 phút, tối thiểu 5 phút.
-BASE_WAIT_MINUTES = 5
-MINUTES_PER_ORDER = 3
-
-
 @router.get("/wait-times", response_model=list[StationWaitTime])
 def wait_times(db: Session = Depends(get_db)):
-    """Không cần đăng nhập, chỉ trả số lượng, không lộ thông tin đơn."""
+    """Không cần đăng nhập, chỉ trả số lượng, không lộ thông tin đơn.
+
+    estimated_minutes = thời gian chờ bếp làm xong các đơn trước
+    + thời gian làm một đơn điển hình (xem app/estimate.py).
+    """
     rows = db.execute(
         select(Order.station_id, func.count(Order.id))
         .where(Order.status.in_(QUEUE_STATUSES))
         .group_by(Order.station_id)
     ).all()
-    return [
-        StationWaitTime(
-            station_id=station_id,
-            queue_count=count,
-            estimated_minutes=max(BASE_WAIT_MINUTES, count * MINUTES_PER_ORDER),
+    capacities = get_kitchen_capacities() if rows else {}
+    result = []
+    for station_id, count in rows:
+        capacity = capacities.get(station_id, DEFAULT_KITCHEN_CAPACITY)
+        wait = wait_minutes(backlog_minutes(db, station_id), capacity)
+        result.append(
+            StationWaitTime(
+                station_id=station_id,
+                queue_count=count,
+                estimated_minutes=wait + TYPICAL_ORDER_MINUTES,
+            )
         )
-        for station_id, count in rows
-    ]
+    return result
 
 
 # ---------- Nhân viên / admin: đơn đã xong gần đây ----------
@@ -295,6 +318,8 @@ def update_status(
         )
 
     change_status(order, OrderStatus(payload.status), user["id"], payload.note)
+    if order.status == OrderStatus.PREPARING.value:
+        update_estimate(db, order)  # bếp bắt đầu làm: xong sau prep_minutes
     db.commit()
     db.refresh(order)
     return order
@@ -394,6 +419,7 @@ def change_payment_method(
             from_status=old_status, to_status=new_status, changed_by=user["id"], note=note
         )
     )
+    update_estimate(db, order)  # vào hàng đợi (CASH) hoặc quay về chờ thanh toán (MOMO)
     db.commit()
     db.refresh(order)
     return order

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { errorMessage } from '../api/client.js'
 import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../api/staff.js'
-import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
+import { formatDateTime, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Icon from './Icon.jsx'
 import NotificationBell from './NotificationBell.jsx'
@@ -146,6 +146,9 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
   const waited = minutesSince(order.created_at)
   const arrived = hasArrived(order)
   const carWait = order.arrived_at ? minutesSince(order.arrived_at) : null
+  // Giờ xong đã hứa với khách: chỉ còn ý nghĩa khi bếp chưa làm xong
+  const showEstimate = order.estimated_ready_at && ['CONFIRMED', 'PREPARING'].includes(order.status)
+  const overdue = showEstimate && minutesUntil(order.estimated_ready_at) <= 0
 
   return (
     <li
@@ -181,6 +184,15 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
         <span className={`with-icon${waited >= 15 ? ' ticket-late' : ''}`}>
           <Icon name="clock" size={14} /> chờ {waited} phút
         </span>
+        {showEstimate && (
+          <>
+            {' · '}
+            <span className={overdue ? 'ticket-late' : ''}>
+              {overdue ? 'Trễ hẹn ' : 'Hẹn xong '}
+              {formatTime(order.estimated_ready_at)}
+            </span>
+          </>
+        )}
       </div>
       {action && (
         <button

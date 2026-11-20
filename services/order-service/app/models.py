@@ -33,6 +33,12 @@ class Order(Base):
     discount_amount: Mapped[int] = mapped_column(default=0)
     total_amount: Mapped[int] = mapped_column(default=0)
     coupon_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Số phút bếp cần để làm cả đơn (xem app/estimate.py)
+    prep_minutes: Mapped[int] = mapped_column(default=0, server_default="0")
+    # Giờ dự kiến món xong, tính lại khi đơn vào hàng đợi và khi bếp bắt đầu làm
+    estimated_ready_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Lúc khách bấm "Tôi đã đến". Tách khỏi status: xe tới sớm không làm đổi tiến độ bếp.
     arrived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -63,6 +69,7 @@ class OrderItem(Base):
     item_name: Mapped[str] = mapped_column(String(100))  # snapshot tên
     unit_price: Mapped[int]                               # snapshot giá
     quantity: Mapped[int]
+    prep_minutes: Mapped[int] = mapped_column(default=3, server_default="3")  # snapshot
 
     order: Mapped["Order"] = relationship(back_populates="items")
 

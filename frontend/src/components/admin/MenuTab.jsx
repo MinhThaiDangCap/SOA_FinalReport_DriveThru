@@ -14,7 +14,7 @@ import { categoryStyle } from '../../categoryStyle.js'
 import { formatPrice } from '../../format.js'
 import Icon from '../Icon.jsx'
 
-const EMPTY_ITEM = { category_id: '', name: '', description: '', price: '', image_url: '', is_active: true }
+const EMPTY_ITEM = { category_id: '', name: '', description: '', price: '', prep_minutes: 3, image_url: '', is_active: true }
 
 function ItemForm({ initial, categories, submitLabel, onSubmit, onCancel }) {
   const [form, setForm] = useState({ ...EMPTY_ITEM, ...initial })
@@ -33,6 +33,7 @@ function ItemForm({ initial, categories, submitLabel, onSubmit, onCancel }) {
         name: form.name,
         description: form.description || null,
         price: Number(form.price),
+        prep_minutes: Number(form.prep_minutes) || 3,
         image_url: form.image_url || null,
         is_active: form.is_active,
       })
@@ -62,6 +63,18 @@ function ItemForm({ initial, categories, submitLabel, onSubmit, onCancel }) {
         <label className="field">
           Giá (VND)
           <input type="number" min={0} step={1000} value={form.price} onChange={set('price')} required />
+        </label>
+        <label className="field">
+          Thời gian làm (phút)
+          <input
+            type="number"
+            min={1}
+            max={60}
+            value={form.prep_minutes ?? 3}
+            onChange={set('prep_minutes')}
+            required
+            title="Số phút bếp làm xong 1 phần, dùng để ước lượng giờ xong đơn"
+          />
         </label>
       </div>
       <label className="field">
@@ -227,7 +240,7 @@ export default function MenuTab() {
                     </span>
                   )}
                   <div>
-                    <strong>{item.name}</strong> · {formatPrice(item.price)}
+                    <strong>{item.name}</strong> · {formatPrice(item.price)} · {item.prep_minutes ?? 3} phút
                     {!item.is_active && <span className="tag-bad"> ngừng bán</span>}
                     <p className="muted">{catName[item.category_id] || 'Không rõ danh mục'}{item.description ? ` · ${item.description}` : ''}</p>
                   </div>

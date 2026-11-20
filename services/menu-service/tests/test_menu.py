@@ -167,8 +167,10 @@ def test_internal_items_contract_for_order_service(client, data):
     by_id = {i["id"]: i for i in resp.json()}
     # Món 999 không tồn tại nên không có trong kết quả
     assert by_id == {
-        a["id"]: {"id": a["id"], "name": "Burger bò", "price": 45000, "available": True},
-        b["id"]: {"id": b["id"], "name": "Burger gà", "price": 42000, "available": False},
+        a["id"]: {"id": a["id"], "name": "Burger bò", "price": 45000, "available": True,
+                  "prep_minutes": 3},
+        b["id"]: {"id": b["id"], "name": "Burger gà", "price": 42000, "available": False,
+                  "prep_minutes": 3},
     }
 
 
@@ -195,3 +197,34 @@ def test_seed_matches_order_service_mock_ids(client):
         3: ("Coca-Cola", 15000, True),
         4: ("Gà rán", 60000, False),
     }
+
+
+# ---------- Ước lượng thời gian: số phút làm món, số đơn bếp làm cùng lúc ----------
+def test_prep_minutes_saved_and_validated(client, data):
+    cat_id = data["items"][0]["category_id"]
+    body = {"category_id": cat_id, "name": "Gà rán", "price": 60000, "prep_minutes": 7}
+    item = client.post("/api/menu/items", json=body, headers=ADMIN).json()
+    assert item["prep_minutes"] == 7
+
+    bad = client.post("/api/menu/items", json={**body, "prep_minutes": 0}, headers=ADMIN)
+    assert bad.status_code == 422
+
+    sid = data["station"]["id"]
+    got = client.get(f"/internal/items?station_id={sid}&ids={item['id']}", headers=INTERNAL)
+    assert got.json()[0]["prep_minutes"] == 7
+
+
+def test_kitchen_capacity_and_internal_station_list(client, data):
+    sid = data["station"]["id"]
+    assert data["station"]["kitchen_capacity"] == 2  # mặc định
+
+    body = {"name": "Quận 7", "address": "19 Nguyễn Hữu Thọ", "kitchen_capacity": 4}
+    r = client.put(f"/api/menu/stations/{sid}", json=body, headers=ADMIN)
+    assert r.status_code == 200 and r.json()["kitchen_capacity"] == 4
+    assert client.put(f"/api/menu/stations/{sid}", json={**body, "kitchen_capacity": 0},
+                      headers=ADMIN).status_code == 422
+
+    listed = client.get("/internal/stations", headers=INTERNAL)
+    assert listed.status_code == 200
+    assert [(s["id"], s["kitchen_capacity"]) for s in listed.json()] == [(sid, 4)]
+    assert client.get("/internal/stations").status_code in (401, 403)  # thiếu key nội bộ

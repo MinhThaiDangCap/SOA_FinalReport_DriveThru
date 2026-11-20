@@ -44,10 +44,20 @@ def get_items_for_order(
     ).all()
     return [
         InternalItemOut(
-            id=it.id, name=it.name, price=it.price, available=it.id not in sold_out
+            id=it.id,
+            name=it.name,
+            price=it.price,
+            available=it.id not in sold_out,
+            prep_minutes=it.prep_minutes,
         )
         for it in items
     ]
+
+
+@router.get("/stations", response_model=list[StationOut])
+def list_stations_internal(db: Session = Depends(get_db)):
+    """order-service lấy số đơn bếp làm cùng lúc của mọi cửa hàng (ước lượng thời gian chờ)."""
+    return db.scalars(select(Station).order_by(Station.id)).all()
 
 
 @router.get("/stations/{station_id}", response_model=StationOut)

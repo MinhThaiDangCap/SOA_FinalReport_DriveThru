@@ -41,6 +41,7 @@ class OrderItemOut(BaseModel):
     item_name: str
     unit_price: int
     quantity: int
+    prep_minutes: int = 3
 
 
 class StatusHistoryOut(BaseModel):
@@ -67,6 +68,8 @@ class OrderOut(BaseModel):
     total_amount: int
     coupon_code: str | None
     arrived_at: datetime | None = None  # khách đã báo tới quầy (độc lập với status)
+    prep_minutes: int = 0               # số phút bếp cần để làm cả đơn
+    estimated_ready_at: datetime | None = None  # giờ dự kiến món xong
     created_at: datetime
     items: list[OrderItemOut]
     history: list[StatusHistoryOut]

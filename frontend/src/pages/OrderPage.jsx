@@ -8,12 +8,30 @@ import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import Icon from '../components/Icon.jsx'
 import ReviewBox from '../components/ReviewBox.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
-import { formatDateTime, formatPrice, METHOD_LABEL, STATUS_LABEL } from '../format.js'
+import { formatDateTime, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
 import { payForOrder } from '../payment.js'
 
 const POLL_MS = 5000
 const TERMINAL = ['COMPLETED', 'CANCELLED']
 const FLOW = ['PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'COMPLETED']
+
+/** Giờ món xong dự kiến (tính từ thời gian làm từng món và số đơn đang chờ ở cửa hàng). */
+function EstimateBox({ iso }) {
+  const left = minutesUntil(iso)
+  return (
+    <div className="estimate-box">
+      <Icon name="clock" size={22} />
+      <div>
+        <strong>Dự kiến xong lúc {formatTime(iso)}</strong>
+        <p>
+          {left !== null && left > 0
+            ? `Khoảng ${left} phút nữa. Bạn canh giờ này để tới nhận món nhé.`
+            : 'Món sắp xong, cửa hàng đang hoàn tất đơn của bạn.'}
+        </p>
+      </div>
+    </div>
+  )
+}
 
 const STATUS_HINT = {
   PENDING_PAYMENT: 'Đơn đang chờ thanh toán. Hoàn tất thanh toán để cửa hàng bắt đầu chuẩn bị.',
@@ -177,6 +195,9 @@ export default function OrderPage() {
         </span>
       </p>
       <p className="order-hint">{STATUS_HINT[status]}</p>
+      {order.estimated_ready_at && ['CONFIRMED', 'PREPARING'].includes(status) && (
+        <EstimateBox iso={order.estimated_ready_at} />
+      )}
       {order.payment_method === 'CASH' && !finished && (
         <div className="cash-box">
           <Icon name="card" size={22} />

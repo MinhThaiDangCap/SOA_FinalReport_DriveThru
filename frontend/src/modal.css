@@ -185,6 +185,24 @@
   color: #1d6b3a;
 }
 
+/* ========== Trang đơn của khách: giờ xong dự kiến ========== */
+.estimate-box {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #bcd6f2;
+  border-radius: 12px;
+  background: #e8f1fc;
+  color: #1f4f85;
+}
+
+.estimate-box p {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+
 /* ========== Ô nhập có lỗi ========== */
 .field-required {
   color: var(--brand);
