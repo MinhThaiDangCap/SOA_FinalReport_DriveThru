@@ -142,11 +142,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="GoLane Auth Service",
-<<<<<<< HEAD
     description="Dịch vụ Đăng ký, Đăng nhập, Quản lý Nhân viên và Phân quyền JWT",
-=======
-    description="Dịch vụ Đăng ký, Đăng nhập, Phân quyền JWT và Quản lý nhân viên",
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -387,11 +383,7 @@ def toggle_staff_status(
     "/internal/auth/users/{user_id}",
     response_model=UserResponse,
     tags=["Internal Service-to-Service"],
-<<<<<<< HEAD
-    summary="[Internal] Lấy thông tin user từ các microservice nội bộ",
-=======
     summary="[Internal] Lấy thông tin user cho order-service / feedback-service",
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
 )
 def get_user_internal(
     user_id: int,

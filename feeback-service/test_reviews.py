@@ -128,13 +128,3 @@ def test_get_order_review_requires_login_and_owner():
         assert client.get("/api/reviews/orders/2004").status_code == 401
     finally:
         app.dependency_overrides[get_current_user] = override_get_current_user
-<<<<<<< HEAD
-=======
-
-
-
-def test_telegram_review_endpoint_removed():
-    """Đánh giá chỉ nhận qua web, không còn API cho bot Telegram."""
-    res = client.post("/internal/reviews/telegram", json={"order_id": 1, "rating": 5})
-    assert res.status_code == 404
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6

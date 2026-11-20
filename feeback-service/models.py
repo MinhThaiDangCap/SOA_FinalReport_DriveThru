@@ -1,14 +1,10 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, Text, DateTime
+from sqlalchemy import Column, Integer, String, Text, DateTime
 from database import Base
 
 
 class Review(Base):
-<<<<<<< HEAD
     """Bảng 'reviews' lưu đánh giá dịch vụ của khách hàng trong feedback_db"""
-=======
-    """Bảng 'reviews' lưu đánh giá của khách trong feedback_db"""
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
     __tablename__ = "reviews"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -28,10 +24,7 @@ class Review(Base):
     # Nội dung góp ý (Bắt buộc nếu rating là 1 hoặc 2 sao)
     comment = Column(Text, nullable=True)
 
-<<<<<<< HEAD
     # Nguồn đánh giá
     source = Column(String(20), default="web", nullable=False)
 
-=======
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

@@ -1,42 +1,44 @@
-import { Link, NavLink, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Route, Routes } from "react-router-dom";
 
-import { useAuth } from './context/AuthContext.jsx'
-import { useCart } from './context/CartContext.jsx'
-import CheckoutPage from './pages/CheckoutPage.jsx'
-import LoginPage from './pages/LoginPage.jsx'
-import MenuPage from './pages/MenuPage.jsx'
-import RegisterPage from './pages/RegisterPage.jsx'
-import StationsPage from './pages/StationsPage.jsx'
+import { useAuth } from "./context/AuthContext.jsx";
+import { useCart } from "./context/CartContext.jsx";
+import CheckoutPage from "./pages/CheckoutPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
+import MenuPage from "./pages/MenuPage.jsx";
+import RegisterPage from "./pages/RegisterPage.jsx";
+import StationsPage from "./pages/StationsPage.jsx";
 
-import Icon from './components/Icon.jsx'
-import ProtectedRoute, { GuestOnlyRoute, homePath } from './components/ProtectedRoute.jsx'
-import OrderPage from './pages/OrderPage.jsx'
-import './dashboard.css'
-import './home.css'
-import './icons.css'
-import './modal.css'
-import './board.css'
-import AdminPage from './pages/AdminPage.jsx'
-import OrdersPage from './pages/OrdersPage.jsx'
-import PaymentResultPage from './pages/PaymentResultPage.jsx'
-import StaffPage from './pages/StaffPage.jsx'
+import "./board.css";
+import Icon from "./components/Icon.jsx";
+import ProtectedRoute, {
+  GuestOnlyRoute,
+  homePath,
+} from "./components/ProtectedRoute.jsx";
+import "./dashboard.css";
+import "./home.css";
+import "./icons.css";
+import "./modal.css";
+import AdminPage from "./pages/AdminPage.jsx";
+import OrderPage from "./pages/OrderPage.jsx";
+import OrdersPage from "./pages/OrdersPage.jsx";
+import PaymentResultPage from "./pages/PaymentResultPage.jsx";
+import StaffPage from "./pages/StaffPage.jsx";
 
 const ROLE_BADGE = {
-  CUSTOMER: 'Khách hàng',
-  STAFF: 'Nhân viên quầy',
-  ADMIN: 'Quản trị viên',
-}
+  CUSTOMER: "Khách hàng",
+  STAFF: "Nhân viên quầy",
+  ADMIN: "Quản trị viên",
+};
 
 export default function App() {
-  const { cart, totalQuantity } = useCart()
-  const { user, logout } = useAuth()
+  const { cart, totalQuantity } = useCart();
+  const { user, logout } = useAuth();
 
   return (
     <div className="app-shell">
       <header className="topbar">
-<<<<<<< HEAD
         <div className="topbar-inner">
-          <Link to={user ? homePath(user.role) : '/login'} className="brand">
+          <Link to={user ? homePath(user.role) : "/login"} className="brand">
             <span className="brand-mark" aria-hidden="true">
               <Icon name="car" size={20} strokeWidth={2.2} />
             </span>
@@ -47,9 +49,15 @@ export default function App() {
           </Link>
 
           <nav className="topbar-nav">
-            {user?.role === 'CUSTOMER' && (
+            {user?.role === "CUSTOMER" && (
               <>
-                <NavLink to="/" end className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`}>
+                <NavLink
+                  to="/"
+                  end
+                  className={({ isActive }) =>
+                    `topbar-link${isActive ? " active" : ""}`
+                  }
+                >
                   Trang chủ
                 </NavLink>
                 <a href="/#stations" className="topbar-link">
@@ -64,24 +72,44 @@ export default function App() {
                 <a href="/#faq" className="topbar-link">
                   Hỗ trợ
                 </a>
-                <NavLink to="/orders" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`}>
+                <NavLink
+                  to="/orders"
+                  className={({ isActive }) =>
+                    `topbar-link${isActive ? " active" : ""}`
+                  }
+                >
                   Đơn của tôi
                 </NavLink>
               </>
             )}
-            {user?.role === 'CUSTOMER' && cart.stationId && totalQuantity > 0 && (
-              <Link to={`/stations/${cart.stationId}`} className="topbar-cart">
-                <Icon name="bag" size={16} />
-                Giỏ hàng <span className="badge">{totalQuantity}</span>
-              </Link>
-            )}
-            {user?.role === 'STAFF' && (
-              <NavLink to="/staff" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`}>
+            {user?.role === "CUSTOMER" &&
+              cart.stationId &&
+              totalQuantity > 0 && (
+                <Link
+                  to={`/stations/${cart.stationId}`}
+                  className="topbar-cart"
+                >
+                  <Icon name="bag" size={16} />
+                  Giỏ hàng <span className="badge">{totalQuantity}</span>
+                </Link>
+              )}
+            {user?.role === "STAFF" && (
+              <NavLink
+                to="/staff"
+                className={({ isActive }) =>
+                  `topbar-link${isActive ? " active" : ""}`
+                }
+              >
                 Màn hình quầy
               </NavLink>
             )}
-            {user?.role === 'ADMIN' && (
-              <NavLink to="/admin" className={({ isActive }) => `topbar-link${isActive ? ' active' : ''}`}>
+            {user?.role === "ADMIN" && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  `topbar-link${isActive ? " active" : ""}`
+                }
+              >
                 Quản trị hệ thống
               </NavLink>
             )}
@@ -93,64 +121,26 @@ export default function App() {
                     {ROLE_BADGE[user.role] || user.role}
                   </span>
                 </div>
-                <button type="button" className="btn btn-ghost btn-small" onClick={logout}>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  onClick={logout}
+                >
                   Đăng xuất
                 </button>
               </div>
             ) : (
               <div className="auth-actions">
-                <Link to="/login" className="btn btn-ghost btn-small">Đăng nhập</Link>
-                <Link to="/register" className="btn btn-small">Đăng ký</Link>
+                <Link to="/login" className="btn btn-ghost btn-small">
+                  Đăng nhập
+                </Link>
+                <Link to="/register" className="btn btn-small">
+                  Đăng ký
+                </Link>
               </div>
             )}
           </nav>
         </div>
-=======
-        <Link to={user ? homePath(user.role) : '/login'} className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <Icon name="car" size={20} strokeWidth={2} />
-          </span>
-          <span className="brand-text">GoLane</span>
-        </Link>
-
-        <nav className="topbar-nav">
-          {user?.role === 'CUSTOMER' && cart.stationId && totalQuantity > 0 && (
-            <Link to={`/stations/${cart.stationId}`} className="topbar-cart" aria-label={`Giỏ hàng (${totalQuantity})`}>
-              <Icon name="bag" size={18} />
-              <span className="topbar-cart-text">Giỏ hàng</span>
-              <span key={totalQuantity} className="badge badge-bump">{totalQuantity}</span>
-            </Link>
-          )}
-          {user?.role === 'CUSTOMER' && (
-            <Link to="/orders" className="topbar-link">Đơn của tôi</Link>
-          )}
-          {user?.role === 'STAFF' && (
-            <Link to="/staff" className="topbar-link">Màn hình quầy</Link>
-          )}
-          {user?.role === 'ADMIN' && (
-            <Link to="/admin" className="topbar-link">Quản trị</Link>
-          )}
-          {user ? (
-            <>
-              <span className="topbar-user">{user.full_name}</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-small topbar-logout"
-                onClick={logout}
-                aria-label="Đăng xuất"
-              >
-                <Icon name="logout" size={18} />
-                <span className="btn-text">Đăng xuất</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <Link to="/login" className="btn btn-ghost btn-small">Đăng nhập</Link>
-              <Link to="/register" className="btn btn-small">Đăng ký</Link>
-            </>
-          )}
-        </nav>
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
       </header>
 
       <main className="page">
@@ -158,7 +148,7 @@ export default function App() {
           <Route
             path="/"
             element={
-              <ProtectedRoute roles={['CUSTOMER']}>
+              <ProtectedRoute roles={["CUSTOMER"]}>
                 <StationsPage />
               </ProtectedRoute>
             }
@@ -166,7 +156,7 @@ export default function App() {
           <Route
             path="/stations/:stationId"
             element={
-              <ProtectedRoute roles={['CUSTOMER']}>
+              <ProtectedRoute roles={["CUSTOMER"]}>
                 <MenuPage />
               </ProtectedRoute>
             }
@@ -174,7 +164,7 @@ export default function App() {
           <Route
             path="/checkout"
             element={
-              <ProtectedRoute roles={['CUSTOMER']}>
+              <ProtectedRoute roles={["CUSTOMER"]}>
                 <CheckoutPage />
               </ProtectedRoute>
             }
@@ -190,7 +180,7 @@ export default function App() {
           <Route
             path="/orders"
             element={
-              <ProtectedRoute roles={['CUSTOMER']}>
+              <ProtectedRoute roles={["CUSTOMER"]}>
                 <OrdersPage />
               </ProtectedRoute>
             }
@@ -198,7 +188,7 @@ export default function App() {
           <Route
             path="/staff"
             element={
-              <ProtectedRoute roles={['STAFF']}>
+              <ProtectedRoute roles={["STAFF"]}>
                 <StaffPage />
               </ProtectedRoute>
             }
@@ -206,7 +196,7 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute roles={['ADMIN']}>
+              <ProtectedRoute roles={["ADMIN"]}>
                 <AdminPage />
               </ProtectedRoute>
             }
@@ -233,7 +223,12 @@ export default function App() {
             element={
               <div className="state">
                 <p>Không tìm thấy trang.</p>
-                <Link to={user ? homePath(user.role) : '/login'} className="btn">Về trang chính</Link>
+                <Link
+                  to={user ? homePath(user.role) : "/login"}
+                  className="btn"
+                >
+                  Về trang chính
+                </Link>
               </div>
             }
           />
@@ -250,18 +245,27 @@ export default function App() {
               <strong>GoLane Drive-Thru</strong>
             </div>
             <p className="footer-desc">
-              Chuỗi cửa hàng đồ ăn nhanh mô hình Drive-Thru hiện đại. Đặt món trước trên web,
-              thanh toán nhanh gọn và nhận món tận xe chỉ trong vài chục giây.
+              Chuỗi cửa hàng đồ ăn nhanh mô hình Drive-Thru hiện đại. Đặt món
+              trước trên web, thanh toán nhanh gọn và nhận món tận xe chỉ trong
+              vài chục giây.
             </p>
           </div>
 
           <div>
             <h3>Khám phá</h3>
             <ul className="footer-links">
-              <li><Link to="/">Danh sách cửa hàng</Link></li>
-              <li><Link to="/orders">Theo dõi đơn hàng</Link></li>
-              <li><a href="/#why-golane">Về GoLane Express</a></li>
-              <li><a href="/#faq">Câu hỏi thường gặp</a></li>
+              <li>
+                <Link to="/">Danh sách cửa hàng</Link>
+              </li>
+              <li>
+                <Link to="/orders">Theo dõi đơn hàng</Link>
+              </li>
+              <li>
+                <a href="/#why-golane">Về GoLane Express</a>
+              </li>
+              <li>
+                <a href="/#faq">Câu hỏi thường gặp</a>
+              </li>
             </ul>
           </div>
 
@@ -277,8 +281,12 @@ export default function App() {
           <div>
             <h3>Chăm sóc khách hàng</h3>
             <ul className="footer-links">
-              <li>Hotline: <strong>1900 6868</strong></li>
-              <li>Email: <strong>cskh@golane.vn</strong></li>
+              <li>
+                Hotline: <strong>1900 6868</strong>
+              </li>
+              <li>
+                Email: <strong>cskh@golane.vn</strong>
+              </li>
               <li>Giờ hoạt động: 06:00 – 23:00 hàng ngày</li>
             </ul>
           </div>
@@ -294,5 +302,5 @@ export default function App() {
         </div>
       </footer>
     </div>
-  )
+  );
 }

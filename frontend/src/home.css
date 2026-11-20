@@ -1,13 +1,10 @@
 /* ========== Trang chủ khách hàng ========== */
-/* --- Phần đầu trang: dải màu thương hiệu + hình xe và món ăn --- */
-.hero-banner {
-  position: relative;
+.hero-home {
   display: grid;
-<<<<<<< HEAD
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 32px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 56px;
   align-items: center;
-  padding: 32px;
+  padding: 48px 56px;
   margin-bottom: 24px;
   border-radius: 24px;
   background: linear-gradient(135deg, #fff1ec 0%, #ffffff 55%, #fff7df 100%);
@@ -110,104 +107,6 @@
 }
 
 .step-pill-card {
-=======
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-  gap: 24px;
-  align-items: center;
-  margin: 8px 0 20px;
-  padding: 40px 44px;
-  border-radius: 22px;
-  overflow: hidden;
-  color: #fff;
-  background:
-    radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.14) 0 18%, transparent 19%),
-    radial-gradient(circle at 100% 100%, rgba(242, 169, 0, 0.35) 0 30%, transparent 31%),
-    linear-gradient(135deg, var(--brand) 0%, #e0561f 100%);
-  box-shadow: 0 14px 34px rgba(200, 55, 29, 0.25);
-}
-
-.hero-eyebrow {
-  display: inline-block;
-  margin-bottom: 12px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.hero-banner h1 {
-  font-size: clamp(1.8rem, 4.4vw, 2.75rem);
-  text-wrap: balance;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-
-.hero-lead {
-  max-width: 540px;
-  margin: 12px 0 22px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 1.04rem;
-}
-
-.hero-art {
-  position: relative;
-  justify-self: center;
-  width: 260px;
-  height: 220px;
-}
-
-.hero-car {
-  position: absolute;
-  inset: 30px 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-}
-
-.hero-food {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  width: 62px;
-  height: 62px;
-  border-radius: 18px;
-  background: #fff;
-  color: var(--tone-ink);
-  box-shadow: 0 8px 20px rgba(80, 20, 5, 0.22);
-  animation: hero-float 4s ease-in-out infinite;
-}
-
-.hero-food-1 { top: 0; left: 6px; transform: rotate(-8deg); }
-.hero-food-2 { top: 8px; right: 0; transform: rotate(7deg); animation-delay: -1s; }
-.hero-food-3 { bottom: 0; left: 26px; transform: rotate(6deg); animation-delay: -2s; }
-.hero-food-4 { bottom: 12px; right: 18px; transform: rotate(-6deg); animation-delay: -3s; }
-
-@keyframes hero-float {
-  50% { translate: 0 -6px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hero-food { animation: none; }
-}
-
-/* --- Ba bước đặt món, xếp ngang và nối bằng mũi tên --- */
-.steps-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 0 0 32px;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-}
-
-.steps-row li {
-  position: relative;
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -218,63 +117,21 @@
   box-shadow: var(--shadow);
 }
 
-<<<<<<< HEAD
 .step-pill-card p {
   margin: 3px 0 0;
-=======
-/* Mũi tên nối sang bước kế tiếp */
-.steps-row li:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: -12px;
-  z-index: 1;
-  width: 10px;
-  height: 10px;
-  border-top: 2px solid var(--accent);
-  border-right: 2px solid var(--accent);
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.steps-row p {
-  margin: 2px 0 0;
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
   color: var(--muted);
   font-size: 13.5px;
 }
 
 .step-icon {
-  position: relative;
   flex: none;
   display: grid;
   place-items: center;
-<<<<<<< HEAD
   width: 42px;
   height: 42px;
   border-radius: 12px;
   background: linear-gradient(135deg, #fdebe6 0%, #fff4d6 100%);
   color: var(--brand-dark);
-=======
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: var(--brand-soft);
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
-}
-
-.step-num {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 /* --- Đơn đang xử lý --- */
@@ -665,9 +522,8 @@
 }
 
 @media (max-width: 860px) {
-  .hero-banner {
+  .hero-home {
     grid-template-columns: 1fr;
-<<<<<<< HEAD
     padding: 22px;
   }
 
@@ -677,21 +533,6 @@
 
   .benefit-grid {
     grid-template-columns: 1fr;
-=======
-    padding: 28px 22px;
-  }
-
-  .hero-art {
-    display: none;
-  }
-
-  .steps-row {
-    grid-template-columns: 1fr;
-  }
-
-  .steps-row li:not(:last-child)::after {
-    display: none;
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
   }
 
   .stations-filter,

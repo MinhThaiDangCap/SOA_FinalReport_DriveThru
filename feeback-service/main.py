@@ -59,10 +59,7 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=4,
                     comment="Burger bò phô mai nóng hổi, khoai tây giòn.",
-<<<<<<< HEAD
                     source="web",
-=======
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
                 ),
                 Review(
                     order_id=1003,
@@ -77,22 +74,15 @@ def seed_sample_reviews():
                     station_id=1,
                     rating=1,
                     comment="Giao thiếu 1 gói tương ớt và khăn giấy dù đã ghi chú.",
-<<<<<<< HEAD
                     source="web",
-=======
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
                 ),
                 Review(
                     order_id=1005,
                     customer_id=4,
                     station_id=2,
                     rating=5,
-<<<<<<< HEAD
                     comment="Chi nhánh rộng rãi, bấm Tôi đã đến là 30 giây sau có nhân viên mang ra.",
                     source="web",
-=======
-                    comment="Chi nhánh Quận 7 rộng rãi, bấm Tôi đã đến là 30 giây sau có nhân viên mang ra.",
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
                 ),
                 Review(
                     order_id=1006,
@@ -260,11 +250,7 @@ def create_review(
     db.commit()
     db.refresh(new_review)
 
-<<<<<<< HEAD
     # 4. Cập nhật Prometheus Metrics
-=======
-    # 4. Cập nhật Prometheus Metrics (Grafana theo dõi đánh giá 1-2 sao)
->>>>>>> 4992f135cecc4ea07e032d5a1b6eabaf0fea01a6
     REVIEWS_CREATED_TOTAL.labels(
         station_id=str(station_id),
         rating=str(req.rating),
