@@ -7,19 +7,28 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import config, momo, order_client
+from app import config, momo, order_client, zalopay
 from app.database import get_db
 from app.models import Payment
-from app.processing import PAYMENTS, process_momo_result
+from app.processing import (
+    METHOD_LABEL,
+    PAYMENTS,
+    _settle,
+    process_momo_result,
+    process_zalopay_callback,
+    sync_zalopay,
+)
 from app.schemas import CashConfirm, CreatePaymentOut, PaymentCreate, PaymentOut
 from app.security import get_current_user, require_roles
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 
-# Giới hạn số tiền một giao dịch của MoMo (VND)
+# Giới hạn số tiền một giao dịch online (VND), theo mức chung của MoMo và ZaloPay
 MOMO_MIN_AMOUNT = 1_000
 MOMO_MAX_AMOUNT = 50_000_000
+# Đơn chọn một trong các cách này là đơn trả online (phải thanh toán trước khi vào bếp)
+ONLINE_METHODS = ("MOMO", "ZALOPAY")
 
 
 # ---------- Hàm dùng chung ----------
@@ -37,18 +46,20 @@ def fetch_order(order_id: int) -> dict:
     return body
 
 
-# ---------- Khách: tạo giao dịch MoMo ----------
-@router.post("/momo/create", response_model=CreatePaymentOut, status_code=201)
-def create_momo_payment(
-    payload: PaymentCreate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("CUSTOMER")),
-):
+def start_online_payment(
+    payload: PaymentCreate, db: Session, user: dict, method: str
+) -> tuple[Payment, int]:
+    """Kiểm tra đơn rồi tạo bản ghi giao dịch PENDING (chưa commit). Dùng chung MoMo/ZaloPay.
+
+    Đơn trả online (MOMO hoặc ZALOPAY) chưa thanh toán thì trả bằng ví nào cũng được:
+    khi tiền về, order-service ghi lại đúng ví khách đã dùng.
+    """
     order = fetch_order(payload.order_id)
+    label = METHOD_LABEL[method]
 
     if order["customer_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
-    if order["payment_method"] != "MOMO":
+    if order["payment_method"] not in ONLINE_METHODS:
         raise HTTPException(status_code=400, detail="Đơn này chọn trả tại quầy")
     if order["status"] != "PENDING_PAYMENT":
         raise HTTPException(
@@ -59,7 +70,7 @@ def create_momo_payment(
     if not MOMO_MIN_AMOUNT <= amount <= MOMO_MAX_AMOUNT:
         raise HTTPException(
             status_code=400,
-            detail="MoMo chỉ nhận thanh toán từ 1.000đ đến 50.000.000đ",
+            detail=f"{label} chỉ nhận thanh toán từ 1.000đ đến 50.000.000đ",
         )
 
     already_paid = db.scalar(
@@ -74,21 +85,33 @@ def create_momo_payment(
     payment = Payment(
         order_id=payload.order_id,
         customer_id=user["id"],
-        method="MOMO",
+        method=method,
         amount=amount,
         status="PENDING",
-        txn_ref=uuid.uuid4().hex,  # tạm, đổi ngay bên dưới
+        txn_ref=uuid.uuid4().hex,  # tạm, đổi ngay sau khi có payment.id
     )
     db.add(payment)
     db.flush()  # để có payment.id
+    return payment, amount
+
+
+def mock_url(txn_ref: str) -> str:
+    return f"{config.PUBLIC_BASE_URL}/api/payments/mock/pay?txn_ref={txn_ref}&success=true"
+
+
+# ---------- Khách: tạo giao dịch MoMo ----------
+@router.post("/momo/create", response_model=CreatePaymentOut, status_code=201)
+def create_momo_payment(
+    payload: PaymentCreate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("CUSTOMER")),
+):
+    payment, amount = start_online_payment(payload, db, user, "MOMO")
     # Đuôi ngẫu nhiên: orderId phải là duy nhất trên MoMo, mà key sandbox thì dùng chung
     payment.txn_ref = f"DT{payload.order_id}P{payment.id}-{uuid.uuid4().hex[:10]}"
 
     if config.MOCK_MODE:
-        payment_url = (
-            f"{config.PUBLIC_BASE_URL}/api/payments/mock/pay"
-            f"?txn_ref={payment.txn_ref}&success=true"
-        )
+        payment_url = mock_url(payment.txn_ref)
     else:
         try:
             payment_url = momo.create_payment(
@@ -100,6 +123,46 @@ def create_momo_payment(
             raise HTTPException(
                 status_code=502,
                 detail="Không tạo được giao dịch MoMo, vui lòng thử lại",
+            )
+
+    db.commit()
+    return CreatePaymentOut(
+        payment_id=payment.id,
+        txn_ref=payment.txn_ref,
+        amount=amount,
+        payment_url=payment_url,
+    )
+
+
+# ---------- Khách: tạo giao dịch ZaloPay ----------
+@router.post("/zalopay/create", response_model=CreatePaymentOut, status_code=201)
+def create_zalopay_payment(
+    payload: PaymentCreate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("CUSTOMER")),
+):
+    payment, amount = start_online_payment(payload, db, user, "ZALOPAY")
+    # app_trans_id = yymmdd_<mã riêng>; đuôi ngẫu nhiên vì app_id sandbox dùng chung
+    payment.txn_ref = zalopay.make_trans_id(
+        f"DT{payload.order_id}P{payment.id}x{uuid.uuid4().hex[:8]}"
+    )
+
+    if config.MOCK_MODE:
+        payment_url = mock_url(payment.txn_ref)
+    else:
+        try:
+            payment_url = zalopay.create_order(
+                payment.txn_ref,
+                amount,
+                f"GoLane - Thanh toan don hang #{payload.order_id}",
+                app_user=f"user{user['id']}",
+            )
+        except zalopay.ZaloPayError as e:
+            db.rollback()
+            logger.error("Tạo giao dịch ZaloPay thất bại: %s", e)
+            raise HTTPException(
+                status_code=502,
+                detail="Không tạo được giao dịch ZaloPay, vui lòng thử lại",
             )
 
     db.commit()
@@ -151,18 +214,75 @@ def momo_return(request: Request, db: Session = Depends(get_db)):
     if payment is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
 
+    return result_body(payment)
+
+
+def result_body(payment: Payment) -> dict:
+    """Kết quả hiển thị trên trang /payment/result, lấy từ DB, không tin tham số trên URL."""
+    label = METHOD_LABEL.get(payment.method, payment.method)
     return {
         "order_id": payment.order_id,
         "amount": payment.amount,
-        "payment_status": payment.status,  # lấy từ DB, không tin tham số trên URL
+        "method": payment.method,
+        "payment_status": payment.status,
         "success": payment.status == "SUCCESS",
         "message": {
             "SUCCESS": "Thanh toán thành công",
             "FAILED": "Thanh toán không thành công",
-            "PENDING": "Đang chờ xác nhận từ MoMo",
-            "REFUNDED": "Đơn đã hủy, tiền đã được hoàn về ví MoMo",
+            "PENDING": f"Đang chờ xác nhận từ {label}",
+            "REFUNDED": f"Đơn đã hủy, tiền đã được hoàn về ví {label}",
         }.get(payment.status, payment.status),
     }
+
+
+# ---------- ZaloPay gọi về khi khách trả thành công (server-to-server, POST JSON) ----------
+@router.post("/zalopay/callback")
+async def zalopay_callback(request: Request, db: Session = Depends(get_db)):
+    """ZaloPay yêu cầu trả JSON {return_code, return_message}:
+    1 = đã nhận, 2 = trùng (đã xử lý rồi), -1 = dữ liệu sai, 0 = lỗi tạm, ZaloPay gửi lại.
+    """
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("body không phải object")
+    except ValueError:
+        return {"return_code": -1, "return_message": "invalid body"}
+
+    try:
+        result = process_zalopay_callback(
+            db, str(body.get("data") or ""), str(body.get("mac") or "")
+        )
+    except Exception:
+        logger.exception("Lỗi khi xử lý callback ZaloPay")
+        db.rollback()
+        result = "retry"
+
+    if result != "ok":
+        logger.warning("Callback ZaloPay: %s", result)
+    codes = {"ok": 1, "already_processed": 2, "retry": 0}
+    return {"return_code": codes.get(result, -1), "return_message": result}
+
+
+# ---------- Khách quay về từ ZaloPay: web gọi API này để hiển thị kết quả ----------
+@router.get("/zalopay/return")
+def zalopay_return(request: Request, db: Session = Depends(get_db)):
+    params = dict(request.query_params)
+    txn_ref = params.get("apptransid", "")
+
+    if not config.MOCK_MODE and not zalopay.verify_redirect(params):
+        raise HTTPException(status_code=400, detail="Chữ ký không hợp lệ")
+
+    payment = db.scalar(select(Payment).where(Payment.txn_ref == txn_ref))
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
+
+    # Callback chưa tới (chạy local không có ngrok, hoặc ZaloPay gửi chậm):
+    # hỏi thẳng ZaloPay bằng API tra cứu có ký, idempotent nên gọi lại cũng an toàn
+    if payment.status == "PENDING" and not config.MOCK_MODE:
+        sync_zalopay(db, payment)
+        db.refresh(payment)
+
+    return result_body(payment)
 
 
 # ---------- Thanh toán giả (chỉ chạy khi PAYMENT_MOCK_MODE=true) ----------
@@ -175,15 +295,25 @@ def mock_pay(txn_ref: str, success: bool = True, db: Session = Depends(get_db)):
     if payment is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy giao dịch")
 
-    params = {
-        "orderId": txn_ref,
-        "amount": payment.amount,
-        "resultCode": 0 if success else 1006,
-        "message": "Giao dịch giả lập",
-        "transId": f"MOCK{payment.id}",
-        "payType": "mock",
-    }
-    result = process_momo_result(db, params, skip_signature=True)
+    if payment.method == "MOMO":
+        params = {
+            "orderId": txn_ref,
+            "amount": payment.amount,
+            "resultCode": 0 if success else 1006,
+            "message": "Giao dịch giả lập",
+            "transId": f"MOCK{payment.id}",
+            "payType": "mock",
+        }
+        result = process_momo_result(db, params, skip_signature=True)
+    else:
+        result = _settle(
+            db,
+            payment,
+            success=success,
+            transaction_ref=f"MOCK{payment.id}",
+            bank_code="mock",
+            fail_note="Giao dịch giả lập thất bại",
+        )
     db.refresh(payment)
     return {"result": result, "payment_status": payment.status}
 
@@ -200,7 +330,7 @@ def confirm_cash(
     if user["role"] == "STAFF" and user["station_id"] != order["station_id"]:
         raise HTTPException(status_code=403, detail="Đơn này thuộc cửa hàng khác")
     if order["payment_method"] != "CASH":
-        raise HTTPException(status_code=400, detail="Đơn này thanh toán qua MoMo")
+        raise HTTPException(status_code=400, detail="Đơn này thanh toán online")
     if order["status"] in ("PENDING_PAYMENT", "CANCELLED"):
         raise HTTPException(
             status_code=409,

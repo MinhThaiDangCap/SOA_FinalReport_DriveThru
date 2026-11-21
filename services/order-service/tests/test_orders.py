@@ -309,3 +309,50 @@ def test_estimate_resets_when_kitchen_starts(client):
                      headers=auth(20, "STAFF", 1))
     # bếp bắt đầu làm đơn này: không còn phải chờ đơn trước, xong sau 5 phút
     assert 4.9 < minutes_from_now(r.json()["estimated_ready_at"]) <= 5
+
+
+# ================= ZaloPay =================
+def test_zalopay_order_waits_for_payment(client):
+    body = {**BODY, "payment_method": "ZALOPAY"}
+    r = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 201
+    assert r.json()["status"] == "PENDING_PAYMENT"
+    assert r.json()["history"][-1]["note"] == "Chờ thanh toán ZaloPay"
+
+
+def test_payment_confirmed_records_wallet_used(client):
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = client.post(f"/internal/orders/{oid}/payment-confirmed",
+                    json={"transaction_ref": "260000123", "method": "ZALOPAY"},
+                    headers={"X-Internal-Key": "ik"})
+    assert r.status_code == 200
+    order = client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()
+    assert (order["payment_method"], order["status"]) == ("ZALOPAY", "CONFIRMED")
+    assert order["history"][-1]["note"] == "Thanh toán ZaloPay thành công (mã GD: 260000123)"
+
+
+def test_switch_unpaid_momo_to_zalopay(client, monkeypatch):
+    monkeypatch.setattr("app.payment_client.is_paid", lambda oid: False)
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = change_method(client, oid, "ZALOPAY")
+    assert r.status_code == 200
+    assert (r.json()["payment_method"], r.json()["status"]) == ("ZALOPAY", "PENDING_PAYMENT")
+
+
+def test_cash_order_cannot_switch_to_zalopay(client):
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert change_method(client, oid, "ZALOPAY").status_code == 409
+
+
+def test_cancel_paid_zalopay_order_refunds_to_zalopay(client, monkeypatch):
+    monkeypatch.setattr("app.payment_client.refund_order",
+                        lambda oid: {"refunded": True, "amount": 90000, "method": "ZALOPAY"})
+    body = {**BODY, "payment_method": "ZALOPAY"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    client.post(f"/internal/orders/{oid}/payment-confirmed",
+                json={"transaction_ref": "1", "method": "ZALOPAY"}, headers={"X-Internal-Key": "ik"})
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200
+    assert r.json()["history"][-1]["note"] == "Khách hủy đơn, đã hoàn 90.000đ về ví ZaloPay"

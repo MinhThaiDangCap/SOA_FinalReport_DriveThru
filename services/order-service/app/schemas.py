@@ -13,7 +13,7 @@ class OrderItemIn(BaseModel):
 class OrderCreate(BaseModel):
     station_id: int = Field(gt=0)
     license_plate: str = Field(min_length=4, max_length=15)
-    payment_method: Literal["MOMO", "CASH"]
+    payment_method: Literal["MOMO", "ZALOPAY", "CASH"]
     coupon_code: str | None = Field(default=None, max_length=30)
     items: list[OrderItemIn] = Field(min_length=1)
 
@@ -30,7 +30,7 @@ class OrderCreate(BaseModel):
 
 
 class PaymentMethodUpdate(BaseModel):
-    payment_method: Literal["MOMO", "CASH"]
+    payment_method: Literal["MOMO", "ZALOPAY", "CASH"]
 
 
 # ---------- Response ----------
@@ -111,6 +111,8 @@ class InternalOrderOut(BaseModel):
 
 class PaymentConfirmIn(BaseModel):
     transaction_ref: str | None = Field(default=None, max_length=100)
+    # Ví khách thực sự đã dùng để trả (đơn online trả được bằng MoMo hoặc ZaloPay)
+    method: Literal["MOMO", "ZALOPAY"] = "MOMO"
     
     # ---------- Mã giảm giá ----------
 class CouponCreate(BaseModel):

@@ -10,7 +10,7 @@ import { formatPrice, STATUS_LABEL } from '../format.js'
 
 const STEPS = [
   { icon: 'mapPin', title: 'Chọn cửa hàng', text: 'Chọn chi nhánh gần tuyến đường của bạn, xem menu và thời gian chờ.' },
-  { icon: 'card', title: 'Đặt & thanh toán', text: 'Thanh toán trực tuyến qua ví MoMo hoặc trả tiền mặt tại quầy.' },
+  { icon: 'card', title: 'Đặt & thanh toán', text: 'Thanh toán trực tuyến qua ví MoMo, ZaloPay hoặc trả tiền mặt tại quầy.' },
   { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến" khi vào làn xe, nhân viên mang món ra tận nơi.' },
 ]
 
@@ -48,7 +48,7 @@ const FAQS = [
   },
   {
     q: 'Tôi có thể hủy đơn hoặc đổi phương thức thanh toán không?',
-    a: 'Có. Bạn hoàn toàn có thể hủy đơn hoặc đổi giữa MoMo và Tiền mặt trước khi bếp bắt đầu chế biến món. Nếu đã thanh toán qua MoMo, hệ thống sẽ hoàn tiền tự động về ví.',
+    a: 'Có. Bạn hoàn toàn có thể hủy đơn hoặc đổi từ trả online (MoMo, ZaloPay) sang Tiền mặt trước khi bếp bắt đầu chế biến món. Nếu đã thanh toán online, hệ thống sẽ hoàn tiền tự động về ví đã dùng.',
   },
   {
     q: 'Món tại cửa hàng hết hàng thì sao?',

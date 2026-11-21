@@ -243,6 +243,27 @@ Không cần tài khoản MoMo Business: key test công khai vẫn nhận IPN, v
 - Đặt lại `MOMO_REDIRECT_URL=http://localhost:8080/payment/result` (hoặc xóa các dòng MoMo/ngrok trong `.env`), rồi `docker compose up -d payment-service`.
 - Mở `/api/payments/momo/ipn` bằng trình duyệt ra `405 Method Not Allowed` là bình thường, vì route này chỉ nhận POST.
 
+### Thanh toán ZaloPay (sandbox)
+
+Đơn trả online có thể chọn **MoMo** hoặc **ZaloPay** khi đặt. Đơn online chưa trả thì trả bằng ví nào cũng được (trang đơn có nút "Trả bằng … thay thế"); khi tiền về, order-service ghi lại đúng ví khách đã dùng. Hủy đơn đã trả thì tiền được hoàn về đúng ví đó.
+
+**Luồng:**
+1. Web gọi `POST /api/payments/zalopay/create`. payment-service gọi API `v2/create` của ZaloPay (ký HMAC-SHA256 bằng `key1`) và trả về `order_url`.
+2. Khách thanh toán trên trang ZaloPay: quét QR bằng app **Zalopay sandbox**, thẻ ATM nội địa hoặc thẻ quốc tế.
+3. ZaloPay gọi **callback** `POST /api/payments/zalopay/callback` (kiểm tra `mac` bằng `key2`, kiểm tra số tiền), rồi chuyển khách về `/payment/result`.
+4. Trang kết quả gọi `GET /api/payments/zalopay/return` (kiểm tra `checksum` bằng `key2`). Nếu callback chưa tới, payment-service tự hỏi ZaloPay bằng API `v2/query`, nên **chạy local không có ngrok vẫn xác nhận được đơn**.
+
+**Cấu hình:** để trống `ZALOPAY_APP_ID`, `ZALOPAY_KEY1`, `ZALOPAY_KEY2` là dùng bộ key sandbox công khai (app_id `2554`). Khi demo qua ngrok, thêm vào `.env` rồi `docker compose up -d payment-service`:
+```
+ZALOPAY_REDIRECT_URL=https://<domain của bạn>/payment/result
+ZALOPAY_CALLBACK_URL=https://<domain của bạn>/api/payments/zalopay/callback
+```
+
+**Dữ liệu test** (theo [Zalopay Docs](https://docs.zalopay.vn/docs/developer-tools/test-instructions/testing)):
+- **Thẻ ATM nội địa** (chọn *Thẻ/tài khoản nội địa*): `9704540000000062`, tên `NGUYEN VAN A`, ngày phát hành `10/18`. Thẻ báo lỗi để thử trường hợp thất bại: `9704540000000013` (thẻ mất), `9704540000000047` (không đủ tiền).
+- **Quét QR**: cài app Zalopay sandbox ở trang [Test wallets](https://docs.zalopay.vn/docs/developer-tools/test-instructions/test-wallets), đăng ký bằng số điện thoại (mã xác thực `111111`), nạp tiền ảo ở mục *Deposit* của trang đó. App Zalopay thật không quét được QR sandbox.
+- Thanh toán xong, mở http://localhost:4040 và lọc chữ `zalopay`: thấy `POST /api/payments/zalopay/callback` là ZaloPay đã gọi callback thật.
+
 ---
 
 ## 6. Lệnh thường dùng

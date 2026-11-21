@@ -21,7 +21,9 @@ def is_paid(order_id: int) -> bool:
 
 
 def refund_order(order_id: int) -> dict:
-    """Nhờ payment-service hoàn tiền MoMo của đơn. Trả {"refunded": bool, "amount": int}.
+    """Nhờ payment-service hoàn tiền online (MoMo/ZaloPay) của đơn.
+
+    Trả {"refunded": bool, "amount": int, "method": "MOMO" | "ZALOPAY" | None}.
 
     Không retry: payment-service tự đảm bảo gọi lại an toàn, khách bấm hủy lần nữa là được.
     Lỗi thì ném HTTPException để KHÔNG hủy đơn khi tiền chưa được hoàn.
@@ -38,6 +40,6 @@ def refund_order(order_id: int) -> dict:
     if resp.status_code != 200:
         raise HTTPException(
             status_code=502,
-            detail="MoMo chưa hoàn tiền được nên đơn chưa bị hủy, vui lòng thử lại sau",
+            detail="Ví chưa hoàn tiền được nên đơn chưa bị hủy, vui lòng thử lại sau",
         )
     return resp.json()

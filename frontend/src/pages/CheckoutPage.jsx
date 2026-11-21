@@ -69,7 +69,7 @@ export default function CheckoutPage() {
     }
 
     try {
-      const next = await payForOrder(order.id)
+      const next = await payForOrder(order.id, method)
       if (next) navigate(next, { replace: true })
     } catch (err) {
       // Đơn đã có nhưng chưa tạo được link thanh toán: khách thanh toán lại ở trang đơn
@@ -172,6 +172,19 @@ export default function CheckoutPage() {
               <small>Thanh toán ngay để đơn được xác nhận</small>
             </span>
           </label>
+          <label className={`option ${method === 'ZALOPAY' ? 'option-on' : ''}`}>
+            <input
+              type="radio"
+              name="method"
+              value="ZALOPAY"
+              checked={method === 'ZALOPAY'}
+              onChange={() => setMethod('ZALOPAY')}
+            />
+            <span>
+              <strong>Thanh toán online (ZaloPay)</strong>
+              <small>Quét QR bằng app ZaloPay hoặc trả bằng thẻ ATM / thẻ quốc tế</small>
+            </span>
+          </label>
           <label className={`option ${method === 'CASH' ? 'option-on' : ''}`}>
             <input
               type="radio"
@@ -182,13 +195,13 @@ export default function CheckoutPage() {
             />
             <span>
               <strong>Trả tại quầy</strong>
-              <small>Đơn gửi ngay tới cửa hàng, trả tiền mặt khi nhận món. Sau khi đặt không đổi sang MoMo được</small>
+              <small>Đơn gửi ngay tới cửa hàng, trả tiền mặt khi nhận món. Sau khi đặt không đổi sang trả online được</small>
             </span>
           </label>
         </fieldset>
 
         <button type="submit" className="btn btn-block" disabled={busy}>
-          {busy ? 'Đang xử lý...' : method === 'MOMO' ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
+          {busy ? 'Đang xử lý...' : method !== 'CASH' ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
         </button>
       </form>
     </div>

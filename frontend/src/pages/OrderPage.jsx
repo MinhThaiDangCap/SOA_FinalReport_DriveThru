@@ -116,17 +116,19 @@ export default function OrderPage() {
     }
   }
 
-  // Chỉ đổi được MoMo (chưa trả) -> trả tại quầy. Đơn trả tại quầy đã gửi tới cửa hàng
-  // nên không đổi sang MoMo (tránh rút đơn khỏi hàng đợi của quầy).
+  // Chỉ đổi được đơn online (chưa trả) -> trả tại quầy. Đơn trả tại quầy đã gửi tới cửa hàng
+  // nên không đổi sang trả online (tránh rút đơn khỏi hàng đợi của quầy).
   function handleChangeToCash() {
     return runAction((id) => changePaymentMethod(id, 'CASH'))
   }
 
-  async function handlePay() {
+  // Đơn online chưa trả: trả bằng ví đã chọn hoặc ví còn lại đều được
+  // (payment-service báo về order-service đúng ví khách đã dùng)
+  async function handlePay(method) {
     setBusy(true)
     setNotice('')
     try {
-      const next = await payForOrder(order.id)
+      const next = await payForOrder(order.id, method)
       if (next) setReloadKey((k) => k + 1) // chế độ giả lập: tải lại để thấy trạng thái mới
     } catch (err) {
       setNotice(errorMessage(err))
@@ -155,7 +157,10 @@ export default function OrderPage() {
   const currentKey = status === 'ARRIVED' ? 'READY' : status
   const currentIndex = steps.indexOf(currentKey)
 
-  const needsPayment = status === 'PENDING_PAYMENT' && order.payment_method === 'MOMO'
+  const isOnline = ['MOMO', 'ZALOPAY'].includes(order.payment_method)
+  const wallet = METHOD_LABEL[order.payment_method] || order.payment_method
+  const otherMethod = order.payment_method === 'ZALOPAY' ? 'MOMO' : 'ZALOPAY'
+  const needsPayment = status === 'PENDING_PAYMENT' && isOnline
   const canCancel = isCustomer && ['PENDING_PAYMENT', 'CONFIRMED'].includes(status)
   // Xe tới quầy là cờ riêng (arrived_at): báo được từ lúc quán nhận đơn, không đổi tiến độ bếp
   const arrived = !!order.arrived_at || status === 'ARRIVED'
@@ -164,9 +169,9 @@ export default function OrderPage() {
     status === 'READY' || status === 'ARRIVED'
       ? 'Món đã xong, nhân viên đang mang ra xe cho bạn.'
       : 'Món đang được chuẩn bị, cửa hàng sẽ ưu tiên đơn của bạn. Vui lòng chờ tại làn nhận món.'
-  // Chỉ đơn MoMo chưa trả tiền mới đổi được (sang trả tại quầy)
-  const canChangeToCash = isCustomer && order.payment_method === 'MOMO' && status === 'PENDING_PAYMENT'
-  const paidMomoCancel = order.payment_method === 'MOMO' && status === 'CONFIRMED'
+  // Chỉ đơn online chưa trả tiền mới đổi được (sang trả tại quầy)
+  const canChangeToCash = isCustomer && isOnline && status === 'PENDING_PAYMENT'
+  const paidOnlineCancel = isOnline && status === 'CONFIRMED'
   const cashPaidAt =
     order.payment_method === 'CASH' && status === 'COMPLETED'
       ? order.history.find((h) => h.to_status === 'COMPLETED')?.changed_at
@@ -269,8 +274,23 @@ export default function OrderPage() {
       </div>
 
       {needsPayment && (
-        <button type="button" className="btn btn-block order-action" onClick={handlePay} disabled={busy}>
-          {busy ? 'Đang xử lý...' : 'Thanh toán ngay'}
+        <button
+          type="button"
+          className="btn btn-block order-action"
+          onClick={() => handlePay(order.payment_method)}
+          disabled={busy}
+        >
+          {busy ? 'Đang xử lý...' : `Thanh toán ngay bằng ${wallet}`}
+        </button>
+      )}
+      {needsPayment && isCustomer && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-block order-action"
+          onClick={() => handlePay(otherMethod)}
+          disabled={busy}
+        >
+          Trả bằng {METHOD_LABEL[otherMethod]} thay thế
         </button>
       )}
       {canArrive && (
@@ -306,7 +326,7 @@ export default function OrderPage() {
       {canCancel && (
         <p className="order-hint cancel-hint">
           Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món
-          {paidMomoCancel ? ', tiền sẽ được hoàn về ví MoMo.' : '.'}
+          {paidOnlineCancel ? `, tiền sẽ được hoàn về ví ${wallet}.` : '.'}
           {order.payment_method === 'CASH' &&
             ' Đơn trả tại quầy đã gửi tới cửa hàng nên không đổi được phương thức thanh toán; muốn trả online, hãy hủy đơn và đặt lại.'}
         </p>
@@ -322,8 +342,8 @@ export default function OrderPage() {
           onCancel={() => setDialog(null)}
         >
           <p>
-            {paidMomoCancel
-              ? `${formatPrice(order.total_amount)} sẽ được hoàn về ví MoMo của bạn.`
+            {paidOnlineCancel
+              ? `${formatPrice(order.total_amount)} sẽ được hoàn về ví ${wallet} của bạn.`
               : 'Đơn sẽ bị hủy và cửa hàng không chuẩn bị món nữa.'}
           </p>
         </ConfirmDialog>
@@ -333,14 +353,14 @@ export default function OrderPage() {
         <ConfirmDialog
           title="Đổi sang trả tại quầy?"
           confirmLabel="Đổi sang trả tại quầy"
-          cancelLabel="Giữ MoMo"
+          cancelLabel={`Giữ ${wallet}`}
           busy={busy}
           onConfirm={handleChangeToCash}
           onCancel={() => setDialog(null)}
         >
           <p>
             Đơn #{order.id} sẽ được gửi ngay tới cửa hàng. Bạn trả {formatPrice(order.total_amount)} tiền
-            mặt khi nhận món. Sau khi đổi sẽ không chuyển lại sang MoMo được.
+            mặt khi nhận món. Sau khi đổi sẽ không chuyển lại sang trả online được.
           </p>
         </ConfirmDialog>
       )}
