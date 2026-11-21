@@ -122,3 +122,99 @@ def test_admin_create_and_toggle_staff():
     toggle_res = client.patch(f"/api/auth/staff/{staff_id}/toggle-active", headers=headers)
     assert toggle_res.status_code == 200
     assert toggle_res.json()["is_active"] is False
+
+
+# ---------- Lỗi đầu vào, xác thực và phân quyền ----------
+def register(email="khach@drivethru.vn", password="Password123", **extra):
+    return client.post(
+        "/api/auth/register",
+        json={"email": email, "password": password, "full_name": "Khách Test", **extra},
+    )
+
+
+def login(email, password="Password123"):
+    return client.post("/api/auth/login", json={"email": email, "password": password})
+
+
+def create_admin_headers():
+    db = TestingSessionLocal()
+    db.add(User(email="admin2@drivethru.vn", hashed_password=hash_password("Password123"),
+                full_name="Admin", role="ADMIN"))
+    db.commit()
+    db.close()
+    token = login("admin2@drivethru.vn").json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_register_rejects_duplicate_email():
+    assert register().status_code == 201
+    dup = register()
+    assert dup.status_code == 400
+
+
+def test_register_validates_input():
+    assert register(password="123").status_code == 422           # mật khẩu < 6 ký tự
+    assert register(email="khong-phai-email").status_code == 422
+    assert register(phone="12345").status_code == 422             # SĐT phải 10 số, bắt đầu bằng 0
+    assert register(phone="0901234567").status_code == 201
+
+
+def test_login_wrong_password_returns_401():
+    register()
+    assert login("khach@drivethru.vn", "SaiMatKhau1").status_code == 401
+    assert login("khong-ton-tai@drivethru.vn").status_code == 401
+
+
+def test_password_is_hashed_not_stored_plain():
+    register()
+    db = TestingSessionLocal()
+    user = db.query(User).filter(User.email == "khach@drivethru.vn").first()
+    db.close()
+    assert user.hashed_password != "Password123"
+    assert user.hashed_password.startswith("$2")                  # bcrypt
+
+
+def test_me_requires_valid_token():
+    assert client.get("/api/auth/me").status_code in (401, 403)
+    bad = client.get("/api/auth/me", headers={"Authorization": "Bearer token-gia"})
+    assert bad.status_code == 401
+
+
+def test_invalid_refresh_token_returns_401():
+    assert client.post("/api/auth/refresh", json={"refresh_token": "khong-hop-le"}).status_code == 401
+
+
+def test_customer_cannot_manage_staff():
+    register()
+    token = login("khach@drivethru.vn").json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    body = {"email": "nv@drivethru.vn", "password": "Password123",
+            "full_name": "Nhân Viên", "station_id": 1}
+    assert client.post("/api/auth/staff", json=body, headers=headers).status_code == 403
+    assert client.get("/api/auth/staff", headers=headers).status_code == 403
+
+
+def test_locked_staff_cannot_login():
+    headers = create_admin_headers()
+    staff = client.post(
+        "/api/auth/staff",
+        json={"email": "nv2@drivethru.vn", "password": "Password123",
+              "full_name": "Nhân Viên 2", "station_id": 2},
+        headers=headers,
+    ).json()
+    assert login("nv2@drivethru.vn").status_code == 200
+    assert staff["station_id"] == 2
+
+    client.patch(f"/api/auth/staff/{staff['id']}/toggle-active", headers=headers)  # khóa
+    assert login("nv2@drivethru.vn").status_code == 403
+
+
+def test_internal_user_api_requires_internal_key():
+    user_id = register().json()["id"]
+    assert client.get(f"/internal/auth/users/{user_id}").status_code == 401
+    wrong = client.get(f"/internal/auth/users/{user_id}", headers={"X-Internal-Key": "sai"})
+    assert wrong.status_code == 401
+
+    from security import INTERNAL_KEY
+    ok = client.get(f"/internal/auth/users/{user_id}", headers={"X-Internal-Key": INTERNAL_KEY})
+    assert ok.status_code == 200 and ok.json()["email"] == "khach@drivethru.vn"
