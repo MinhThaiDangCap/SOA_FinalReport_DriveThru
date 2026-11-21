@@ -207,7 +207,7 @@ Hệ thống dùng **MoMo sandbox** với bộ key test công khai, không cần
    - chuyển khách về `/payment/result` trên web.
 3. payment-service kiểm tra chữ ký HMAC-SHA256 và số tiền, rồi báo order-service chuyển đơn sang `CONFIRMED`. Mỗi giao dịch chỉ được xử lý một lần.
 
-**Thanh toán thành công trên sandbox:** trên trang MoMo chọn **thẻ ATM nội địa** và nhập thẻ test `9704 0000 0000 0018`, tên `NGUYEN VAN A`, ngày phát hành `03/07`, OTP `OTP` (theo tài liệu sandbox của MoMo, có thể thay đổi). Hoặc quét QR bằng app **MoMo bản test (UAT)**; app MoMo thường không dùng được. Bấm hủy trên trang MoMo để thử trường hợp thất bại.
+**Thanh toán thành công trên sandbox:** trên trang MoMo chọn **thẻ quốc tế** và nhập Visa test `4111 1111 1111 1111`, tên `NGUYEN VAN A`, CVC `111`, hạn thẻ trong tương lai, ví dụ `12/30` (nhóm đã thử thanh toán thành công bằng thẻ Visa). Thẻ ATM test `9704 0000 0000 0018` hiện bị sandbox từ chối ("Giao dịch bị từ chối do nhà phát hành…"); số thẻ mới nhất xem ở developers.momo.vn → Hướng dẫn test. Hoặc quét QR bằng app **MoMo bản test (UAT)**; app MoMo thường không dùng được. Bấm hủy trên trang MoMo để thử trường hợp thất bại.
 
 **Chạy trên máy cá nhân (mặc định):** MoMo không gọi IPN vào `localhost` được, nên `MOMO_PROCESS_ON_RETURN=true` cho phép trang kết quả tự xác nhận giao dịch. Bước này vẫn kiểm tra chữ ký nên khách không sửa URL để gian lận được.
 
@@ -224,9 +224,9 @@ Không cần tài khoản MoMo Business: key test công khai vẫn nhận IPN, v
    NGROK_DOMAIN=<domain của bạn>
    MOMO_IPN_URL=https://<domain của bạn>/api/payments/momo/ipn
    MOMO_REDIRECT_URL=https://<domain của bạn>/payment/result
-   MOMO_PROCESS_ON_RETURN=false
+   MOMO_PROCESS_ON_RETURN=true
    ```
-   `MOMO_PROCESS_ON_RETURN=false` để đơn chỉ được xác nhận nhờ IPN, chứng minh IPN chạy thật.
+   Giữ `MOMO_PROCESS_ON_RETURN=true`: khách quay về là đơn được xác nhận ngay (vẫn kiểm tra chữ ký), IPN tới sau chỉ ghi nhận lại, không xử lý trùng. Nếu đặt `false`, đơn **chỉ** được xác nhận khi IPN tới; sandbox đôi khi gửi IPN chậm hoặc không gửi, trang kết quả sẽ đứng ở "Đang chờ xác nhận từ MoMo". Chỉ dùng `false` khi muốn cố ý chứng minh IPN.
 3. Bật tunnel và áp dụng cấu hình mới cho payment-service:
    ```bash
    docker compose --profile tunnel up -d ngrok
@@ -240,7 +240,7 @@ Không cần tài khoản MoMo Business: key test công khai vẫn nhận IPN, v
 
 **Sau khi demo:**
 - Tắt tunnel: `docker compose --profile tunnel stop ngrok`. Khi tunnel bật, ai có link cũng vào được hệ thống (gateway vẫn chặn `/internal/` và `/metrics`).
-- Đặt lại `MOMO_REDIRECT_URL=http://localhost:8080/payment/result`, `MOMO_PROCESS_ON_RETURN=true` (hoặc xóa các dòng MoMo/ngrok trong `.env`), rồi `docker compose up -d payment-service`.
+- Đặt lại `MOMO_REDIRECT_URL=http://localhost:8080/payment/result` (hoặc xóa các dòng MoMo/ngrok trong `.env`), rồi `docker compose up -d payment-service`.
 - Mở `/api/payments/momo/ipn` bằng trình duyệt ra `405 Method Not Allowed` là bình thường, vì route này chỉ nhận POST.
 
 ---
