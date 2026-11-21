@@ -1,0 +1,37 @@
+groups:
+  - name: drivethru-alerts
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} ngừng hoạt động"
+
+      - alert: High5xxRate
+        expr: |
+          100 * sum by (job) (rate(http_requests_total{status="5xx"}[5m]))
+          / sum by (job) (rate(http_requests_total[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} có hơn 5% request lỗi 5xx"
+
+      - alert: HighLatency
+        expr: |
+          sum by (job) (rate(http_request_duration_seconds_sum{handler!="/metrics"}[5m]))
+          / sum by (job) (rate(http_request_duration_seconds_count{handler!="/metrics"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} phản hồi trung bình chậm hơn 1 giây"
+
+      - alert: FailedLoginSpike
+        expr: sum(increase(auth_logins_total{status="failed"}[5m])) > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hơn 10 lần đăng nhập thất bại trong 5 phút"

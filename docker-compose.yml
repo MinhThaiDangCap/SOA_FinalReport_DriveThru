@@ -175,6 +175,8 @@ services:
     restart: always
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheusdata:/prometheus
     ports:
       - "9090:9090"
 
@@ -199,3 +201,4 @@ services:
 volumes:
   pgdata:
   grafanadata:
+  prometheusdata:
