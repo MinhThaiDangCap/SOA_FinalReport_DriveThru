@@ -90,9 +90,8 @@
   font-size: 13px;
 }
 
-.cash-plate {
-  font-size: 1.35rem;
-  letter-spacing: 0.04em;
+.cash-summary .plate {
+  align-self: flex-start;
 }
 
 .cash-items {

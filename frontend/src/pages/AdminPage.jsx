@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { errorMessage } from '../api/client.js'
 import { getAllStations } from '../api/menu.js'
 import CouponsTab from '../components/admin/CouponsTab.jsx'
+import Icon from '../components/Icon.jsx'
 import MenuTab from '../components/admin/MenuTab.jsx'
 import OverviewTab from '../components/admin/OverviewTab.jsx'
 import StaffTab from '../components/admin/StaffTab.jsx'
@@ -84,7 +85,7 @@ export default function AdminPage() {
             rel="noreferrer"
             className="btn btn-ghost btn-small"
           >
-            Giám sát Grafana ↗
+            <span className="with-icon">Giám sát Grafana <Icon name="externalLink" size={14} /></span>
           </a>
         </div>
       </header>

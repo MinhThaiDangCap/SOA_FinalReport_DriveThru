@@ -270,7 +270,7 @@ Xem database bằng TablePlus/DBeaver: host `localhost`, port `5432`, user `admi
 ## 7. Chạy test
 
 Có 2 lớp kiểm thử:
-- **Test API của từng service** (pytest, 81 test): chạy bằng SQLite trong bộ nhớ nên **không cần Postgres hay Docker**. Cần Python 3.12+.
+- **Test API của từng service** (pytest, 82 test): chạy bằng SQLite trong bộ nhớ nên **không cần Postgres hay Docker**. Cần Python 3.12+.
 - **Kiểm tra hệ thống thật** (`scripts/smoke_test.py`, 36 bước) và **phân quyền database** (`scripts/check-db-isolation.sh`): chạy với Docker đang bật, xem [mục 3.4](#34-build-và-chạy).
 
 ```bash
@@ -283,7 +283,7 @@ python -m pytest -q tests
 |---|---|---|
 | `auth-service` | `python -m pytest -q test_auth.py` | 12 |
 | `services/menu-service` | `python -m pytest -q tests` | 20 |
-| `services/order-service` | `python -m pytest -q tests` | 23 |
+| `services/order-service` | `python -m pytest -q tests` | 24 |
 | `services/payment-service` | `python -m pytest -q tests` | 14 |
 | `feeback-service` | `python -m pytest -q test_reviews.py` | 12 |
 

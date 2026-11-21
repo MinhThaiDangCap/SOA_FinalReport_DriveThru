@@ -156,6 +156,14 @@ class CouponOut(BaseModel):
     is_active: bool
 
 
+class CouponAvailableOut(BaseModel):
+    code: str
+    discount_type: str
+    discount_value: int
+    valid_to: date
+    discount_amount: int  # số tiền giảm cho giỏ hàng hiện tại
+
+
 class CouponCheckOut(BaseModel):
     code: str
     discount_amount: int

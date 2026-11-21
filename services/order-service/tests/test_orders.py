@@ -325,3 +325,32 @@ def test_zalopay_order_waits_for_payment(client):
     assert paid.json()["status"] == "CONFIRMED"
     order = client.get(f"/api/orders/{r.json()['id']}", headers=auth(10, "CUSTOMER")).json()
     assert order["history"][-1]["note"] == "Thanh toán ZaloPay thành công (mã GD: 260000123)"
+
+
+# ---------- Mã giảm giá: khách chọn từ danh sách ----------
+def test_available_coupons_for_customer(client):
+    from datetime import date, timedelta
+
+    admin = auth(1, "ADMIN")
+    today = date.today()
+    for code, kind, value, start, end, active in (
+        ("GIAM10", "PERCENT", 10, today, today + timedelta(days=5), True),
+        ("BOT20K", "FIXED", 20000, today, today, True),
+        ("HETHAN", "FIXED", 5000, today - timedelta(days=9), today - timedelta(days=1), True),
+        ("TATMA", "FIXED", 5000, today, today, False),
+    ):
+        r = client.post("/api/orders/coupons", headers=admin, json={
+            "code": code, "discount_type": kind, "discount_value": value,
+            "valid_from": str(start), "valid_to": str(end), "is_active": active})
+        assert r.status_code == 201, r.text
+
+    assert client.get("/api/orders/coupons/available", params={"subtotal": 90000}).status_code == 401
+    r = client.get("/api/orders/coupons/available", params={"subtotal": 90000},
+                   headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200
+    # Chỉ mã đang bật và còn hạn, giảm nhiều nhất xếp trước
+    assert [(c["code"], c["discount_amount"]) for c in r.json()] == [("BOT20K", 20000), ("GIAM10", 9000)]
+    # Giảm không vượt quá tiền hàng
+    r = client.get("/api/orders/coupons/available", params={"subtotal": 15000},
+                   headers=auth(10, "CUSTOMER"))
+    assert r.json()[0] == {**r.json()[0], "code": "BOT20K", "discount_amount": 15000}

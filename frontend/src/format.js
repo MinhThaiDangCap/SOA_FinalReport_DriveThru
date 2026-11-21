@@ -15,6 +15,30 @@ export const STATUS_LABEL = {
   CANCELLED: 'Đã hủy',
 }
 
+/**
+ * Các phương thức thanh toán khách chọn được. Thêm phương thức mới: thêm 1 dòng ở đây
+ * (và cho order-service chấp nhận giá trị đó). online = trả trước qua cổng thanh toán.
+ */
+export const PAYMENT_METHODS = [
+  {
+    value: 'ZALOPAY',
+    icon: 'wallet',
+    title: 'Thanh toán online (ZaloPay)',
+    note: 'Quét QR bằng app ZaloPay hoặc trả bằng thẻ ATM / thẻ quốc tế.',
+    // Ghi chú thêm ở bước đặt đơn
+    checkoutNote: 'Đã thanh toán thì không hủy trên ứng dụng, cần hủy vui lòng gọi hotline 1900 6868.',
+    online: true,
+  },
+  {
+    value: 'CASH',
+    icon: 'cash',
+    title: 'Trả tại quầy',
+    note: 'Đơn gửi ngay tới cửa hàng, trả tiền mặt khi nhận món.',
+    checkoutNote: 'Sau khi đặt không đổi sang trả online được.',
+    online: false,
+  },
+]
+
 export const METHOD_LABEL = {
   ZALOPAY: 'ZaloPay',
   CASH: 'Trả tại quầy',

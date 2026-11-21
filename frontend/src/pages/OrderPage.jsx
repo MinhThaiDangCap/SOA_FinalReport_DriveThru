@@ -6,9 +6,10 @@ import { getStations } from '../api/menu.js'
 import { cancelOrder, changePaymentMethod, getOrder, markArrived } from '../api/orders.js'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import Icon from '../components/Icon.jsx'
+import LicensePlate from '../components/LicensePlate.jsx'
 import ReviewBox from '../components/ReviewBox.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
-import { formatDateTime, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
+import { formatDateTime, formatPrice, formatTime, METHOD_LABEL, minutesUntil, PAYMENT_METHODS, STATUS_LABEL } from '../format.js'
 import { payForOrder } from '../payment.js'
 
 const POLL_MS = 5000
@@ -55,6 +56,7 @@ export default function OrderPage() {
   const [reloadKey, setReloadKey] = useState(0)
   // Hộp thoại đang mở: 'cancel' | 'method' | null
   const [dialog, setDialog] = useState(null)
+  const [newMethod, setNewMethod] = useState('')
 
   const status = order?.status
   const stationId = order?.station_id
@@ -116,10 +118,15 @@ export default function OrderPage() {
     }
   }
 
-  // Chỉ đổi được đơn ZaloPay (chưa trả) -> trả tại quầy. Đơn trả tại quầy đã gửi tới cửa hàng
-  // nên không đổi sang ZaloPay (tránh rút đơn khỏi hàng đợi của quầy).
-  function handleChangeToCash() {
-    return runAction((id) => changePaymentMethod(id, 'CASH'))
+  // Đổi phương thức: chỉ đơn trả online chưa thanh toán. Đơn trả tại quầy đã gửi tới cửa hàng
+  // nên không đổi sang trả online (tránh rút đơn khỏi hàng đợi của quầy).
+  function openMethodDialog() {
+    setNewMethod('')
+    setDialog('method')
+  }
+
+  function handleChangeMethod() {
+    return runAction((id) => changePaymentMethod(id, newMethod))
   }
 
   async function handlePay() {
@@ -168,8 +175,10 @@ export default function OrderPage() {
     status === 'READY' || status === 'ARRIVED'
       ? 'Món đã xong, nhân viên đang mang ra xe cho bạn.'
       : 'Món đang được chuẩn bị, cửa hàng sẽ ưu tiên đơn của bạn. Vui lòng chờ tại làn nhận món.'
-  // Chỉ đơn ZaloPay chưa trả tiền mới đổi được (sang trả tại quầy)
-  const canChangeToCash = isCustomer && isZaloPay && status === 'PENDING_PAYMENT'
+  // Chỉ đơn trả online chưa trả tiền mới đổi được phương thức
+  const canChangeMethod = isCustomer && isZaloPay && status === 'PENDING_PAYMENT'
+  const methodChoices = PAYMENT_METHODS.filter((m) => m.value !== order.payment_method)
+  const chosen = PAYMENT_METHODS.find((m) => m.value === newMethod)
   const cashPaidAt =
     order.payment_method === 'CASH' && status === 'COMPLETED'
       ? order.history.find((h) => h.to_status === 'COMPLETED')?.changed_at
@@ -246,7 +255,7 @@ export default function OrderPage() {
 
       <p className="checkout-station">
         Cửa hàng: <strong>{stationName || `#${order.station_id}`}</strong> · Biển số:{' '}
-        <strong>{order.license_plate}</strong> · Thanh toán:{' '}
+        <LicensePlate value={order.license_plate} size="sm" /> · Thanh toán:{' '}
         <strong>{METHOD_LABEL[order.payment_method] || order.payment_method}</strong>
       </p>
       <p className="order-time">Đặt lúc {formatDateTime(order.created_at)}</p>
@@ -291,14 +300,14 @@ export default function OrderPage() {
           Tôi đã đến
         </button>
       )}
-      {canChangeToCash && (
+      {canChangeMethod && (
         <button
           type="button"
           className="btn btn-ghost btn-block order-action"
-          onClick={() => setDialog('method')}
+          onClick={openMethodDialog}
           disabled={busy}
         >
-          Đổi sang trả tại quầy
+          Đổi phương thức thanh toán
         </button>
       )}
       {canCancel && (
@@ -343,17 +352,44 @@ export default function OrderPage() {
 
       {dialog === 'method' && (
         <ConfirmDialog
-          title="Đổi sang trả tại quầy?"
-          confirmLabel="Đổi sang trả tại quầy"
-          cancelLabel="Giữ ZaloPay"
+          title="Đổi phương thức thanh toán"
+          confirmLabel="Xác nhận đổi"
+          cancelLabel="Giữ nguyên"
+          confirmDisabled={!newMethod}
           busy={busy}
-          onConfirm={handleChangeToCash}
+          onConfirm={handleChangeMethod}
           onCancel={() => setDialog(null)}
         >
-          <p>
-            Đơn #{order.id} sẽ được gửi ngay tới cửa hàng. Bạn trả {formatPrice(order.total_amount)} tiền
-            mặt khi nhận món. Sau khi đổi sẽ không chuyển lại sang ZaloPay được.
+          <p className="method-current">
+            Đang dùng: <strong>{METHOD_LABEL[order.payment_method] || order.payment_method}</strong>
           </p>
+          <fieldset className="option-group method-choices">
+            <legend className="sr-only">Chọn phương thức mới</legend>
+            {methodChoices.map((m) => (
+              <label key={m.value} className={`option ${newMethod === m.value ? 'option-on' : ''}`}>
+                <input
+                  type="radio"
+                  name="new-method"
+                  value={m.value}
+                  checked={newMethod === m.value}
+                  onChange={() => setNewMethod(m.value)}
+                />
+                <span className="option-icon">
+                  <Icon name={m.icon} size={20} />
+                </span>
+                <span>
+                  <strong>{m.title}</strong>
+                  <small>{m.note}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          {chosen && !chosen.online && (
+            <p className="method-warn">
+              Đơn #{order.id} sẽ được gửi ngay tới cửa hàng, bạn trả {formatPrice(order.total_amount)} khi
+              nhận món. Sau khi đổi sẽ không chuyển lại sang thanh toán online được.
+            </p>
+          )}
         </ConfirmDialog>
       )}
 
