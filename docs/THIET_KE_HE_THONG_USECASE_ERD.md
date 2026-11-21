@@ -72,6 +72,7 @@ flowchart LR
 | **UC03** | Đặt đơn Drive-Thru | Khách hàng | `order-service` | Nhập biển số xe, chọn `MOMO` hoặc `CASH`, kiểm tra giá từ `menu-service`, áp dụng coupon. |
 | **UC04** | Thanh toán MoMo | Khách hàng, MoMo | `payment-service` | Tạo link MoMo, xác thực chữ ký HMAC-SHA256, báo `order-service` sang `CONFIRMED`. |
 | **UC05** | Hủy đơn / Đổi PTTT | Khách hàng | `order-service`, `payment-service` | Chỉ hủy/đổi trước khi `PREPARING`. Đơn MoMo đã trả tiền sẽ hoàn ví trước khi hủy. |
+| **UC03b** | Xem giờ xong dự kiến | Khách hàng, Nhân viên | `order-service`, `menu-service` | Tính từ số phút làm từng món (`prep_minutes`), các đơn đang chờ và số đơn bếp làm cùng lúc (`kitchen_capacity`); tính lại khi bếp bắt đầu làm. |
 | **UC06** | Báo "Tôi đã đến" | Khách hàng | `order-service` | Ghi `arrived_at` để đẩy thẻ xe lên đầu hàng đợi và bật chuông báo trên màn hình quầy. |
 | **UC07** | Đánh giá dịch vụ | Khách hàng | `feedback-service` | Chỉ đánh giá đơn `COMPLETED`, mỗi đơn 1 lần. Chấm 1–2 sao **bắt buộc** ghi lý do. |
 | **UC08** | Điều phối hàng đợi | Nhân viên / Admin | `order-service` | Chuyển trạng thái theo máy trạng thái: `CONFIRMED` → `PREPARING` → `READY` → `COMPLETED`. |
@@ -86,6 +87,22 @@ flowchart LR
 Hệ thống áp dụng mẫu **Database-per-Service**: 5 database độc lập trên PostgreSQL 16.
 - **Đường nét liền**: Khóa ngoại vật lý (`FOREIGN KEY`) trong cùng 1 database.
 - **Đường nét đứt**: Tham chiếu logic bằng ID giữa các database khác nhau (không dùng FK vật lý để đảm bảo tính độc lập của Microservices).
+- **Phân quyền ở mức PostgreSQL**: mỗi service đăng nhập bằng tài khoản riêng và chỉ vào được database của mình (xem mục 2.1).
+
+### 2.1. Tài khoản PostgreSQL theo từng service
+
+| Service | Tài khoản | Database sở hữu | Vào database khác |
+|---|---|---|---|
+| `auth-service` | `auth_user` | `auth_db` | Bị chặn (`permission denied`) |
+| `menu-service` | `menu_user` | `menu_db` | Bị chặn |
+| `order-service` | `order_user` | `order_db` | Bị chặn |
+| `payment-service` | `payment_user` | `payment_db` | Bị chặn |
+| `feedback-service` | `feedback_user` | `feedback_db` | Bị chặn |
+
+- `init-dbs.sh` tạo các tài khoản khi PostgreSQL khởi tạo lần đầu: mỗi tài khoản là **chủ** (`OWNER`) database của mình và quyền `CONNECT` mặc định của `PUBLIC` bị thu hồi.
+- Tài khoản `admin` chỉ dùng để quản trị và xem dữ liệu, các service không dùng.
+- Service cần dữ liệu của service khác thì **bắt buộc** gọi REST API nội bộ (mục 4), không thể truy vấn chéo database.
+- Kiểm tra: `bash scripts/check-db-isolation.sh` thử 5 tài khoản × 5 database và in bảng kết quả.
 
 ```mermaid
 erDiagram
@@ -118,6 +135,7 @@ erDiagram
         varchar address
         varchar opening_hours
         boolean is_active
+        int kitchen_capacity "Số đơn bếp làm cùng lúc"
         datetime created_at
     }
     categories {
@@ -132,6 +150,7 @@ erDiagram
         varchar description
         int price "VND"
         varchar image_url
+        int prep_minutes "Phút làm 1 phần"
         boolean is_active
         datetime created_at
     }
@@ -159,6 +178,8 @@ erDiagram
         int discount_amount
         int total_amount
         varchar coupon_code
+        int prep_minutes "Phút làm cả đơn"
+        datetime estimated_ready_at "Giờ xong dự kiến"
         datetime arrived_at "Cờ khách đã tới quầy"
         datetime created_at
         datetime updated_at
@@ -170,6 +191,7 @@ erDiagram
         varchar item_name "Snapshot tên"
         int unit_price "Snapshot giá"
         int quantity
+        int prep_minutes "Snapshot phút làm"
     }
     order_status_history {
         int id PK
@@ -201,7 +223,7 @@ erDiagram
         int amount
         varchar status "PENDING|SUCCESS|FAILED|REFUNDED"
         varchar txn_ref UK
-        varchar vnp_transaction_no "Mã GD MoMo"
+        varchar vnp_transaction_no "Mã GD MoMo (tên cột cũ)"
         varchar bank_code
         varchar note
         int collected_by "Logical -> auth_db.users.id"
@@ -227,7 +249,6 @@ erDiagram
         int station_id "Logical -> menu_db.stations.id"
         int rating "1 đến 5 sao"
         text comment "Bắt buộc nếu rating 1-2"
-        varchar source
         datetime created_at
     }
 
@@ -279,6 +300,7 @@ erDiagram
 | `address` | `VARCHAR(255)` | `NOT NULL` | Địa chỉ |
 | `opening_hours` | `VARCHAR(50)` | `NULL` | Giờ mở cửa (vd: `06:00 - 23:00` hoặc `24/7`) |
 | `is_active` | `BOOLEAN` | `DEFAULT TRUE` | Đang hoạt động / Ngừng hoạt động |
+| `kitchen_capacity` | `INTEGER` | `DEFAULT 2, NOT NULL` | Số đơn bếp làm được cùng lúc (1–20), dùng để ước lượng thời gian chờ |
 | `created_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Thời điểm tạo |
 
 **Bảng `categories`**
@@ -297,6 +319,7 @@ erDiagram
 | `description` | `VARCHAR(500)` | `NULL` | Mô tả món |
 | `price` | `INTEGER` | `NOT NULL` | Giá bán chung (VND) |
 | `image_url` | `VARCHAR(500)` | `NULL` | Đường dẫn ảnh món |
+| `prep_minutes` | `INTEGER` | `DEFAULT 3, NOT NULL` | Số phút bếp làm xong 1 phần (1–60) |
 | `is_active` | `BOOLEAN` | `DEFAULT TRUE` | Còn kinh doanh hay ngừng bán |
 | `created_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Thời điểm tạo |
 
@@ -327,6 +350,8 @@ erDiagram
 | `discount_amount` | `INTEGER` | `DEFAULT 0` | Số tiền giảm giá (VND) |
 | `total_amount` | `INTEGER` | `DEFAULT 0` | Tổng thanh toán (VND) |
 | `coupon_code` | `VARCHAR(30)` | `NULL` | Mã giảm giá đã áp dụng |
+| `prep_minutes` | `INTEGER` | `DEFAULT 0, NOT NULL` | Số phút làm cả đơn = món lâu nhất + 1 phút cho mỗi 2 phần thêm |
+| `estimated_ready_at` | `TIMESTAMPTZ` | `NULL` | Giờ xong dự kiến; tính khi đơn vào hàng đợi, tính lại khi bếp bắt đầu làm |
 | `arrived_at` | `TIMESTAMPTZ` | `NULL` | Thời điểm khách bấm "Tôi đã đến" |
 | `created_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Thời điểm đặt đơn |
 | `updated_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Thời điểm cập nhật cuối |
@@ -340,6 +365,7 @@ erDiagram
 | `item_name` | `VARCHAR(100)` | `NOT NULL` | **Snapshot** tên món lúc đặt |
 | `unit_price` | `INTEGER` | `NOT NULL` | **Snapshot** đơn giá lúc đặt |
 | `quantity` | `INTEGER` | `NOT NULL` | Số lượng |
+| `prep_minutes` | `INTEGER` | `DEFAULT 3, NOT NULL` | **Snapshot** số phút làm món lúc đặt |
 
 **Bảng `order_status_history`**
 | Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
@@ -377,7 +403,7 @@ erDiagram
 | `amount` | `INTEGER` | `NOT NULL` | Số tiền (VND) |
 | `status` | `VARCHAR(10)` | `DEFAULT 'PENDING', INDEX` | `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` |
 | `txn_ref` | `VARCHAR(40)` | `UNIQUE, NOT NULL, INDEX` | Mã tham chiếu giao dịch gửi MoMo |
-| `vnp_transaction_no` | `VARCHAR(40)` | `NULL` | Mã giao dịch từ cổng MoMo trả về |
+| `vnp_transaction_no` | `VARCHAR(40)` | `NULL` | Mã giao dịch từ cổng MoMo trả về (giữ tên cột từ bản VNPay cũ; trong code là `transaction_no`) |
 | `bank_code` | `VARCHAR(20)` | `NULL` | Mã ngân hàng / phương thức |
 | `note` | `VARCHAR(200)` | `NULL` | Ghi chú |
 | `collected_by` | `INTEGER` | `NULL` | ID nhân viên xác nhận thu tiền mặt |
@@ -408,7 +434,6 @@ erDiagram
 | `station_id` | `INTEGER` | `NOT NULL, INDEX` | Tham chiếu logic `menu_db.stations.id` |
 | `rating` | `INTEGER` | `NOT NULL` | Số sao từ `1` đến `5` |
 | `comment` | `TEXT` | `NULL` | Nội dung góp ý (Bắt buộc nếu `rating` là `1` hoặc `2`) |
-| `source` | `VARCHAR(20)` | `DEFAULT 'web', NOT NULL` | Nguồn đánh giá (`web`) |
 | `created_at` | `TIMESTAMP` | `NOT NULL` | Thời điểm đánh giá |
 
 
@@ -435,7 +460,7 @@ flowchart TB
             FB["feedback-service (:8005)<br/>Đánh giá 1-5 sao, Thống kê"]
         end
 
-        subgraph DB["PostgreSQL 16 (:5432) — Database-per-Service"]
+        subgraph DB["PostgreSQL 16 (:5432) — Database-per-Service, mỗi service 1 tài khoản"]
             DB1[("auth_db")]
             DB2[("menu_db")]
             DB3[("order_db")]
@@ -445,7 +470,7 @@ flowchart TB
 
         subgraph Mon["Hệ thống Giám sát"]
             PROM["Prometheus (:9090)<br/>Scrape /metrics mỗi 15s"]
-            GRAF["Grafana (:3000)<br/>Dashboard 6 biểu đồ"]
+            GRAF["Grafana (:3000)<br/>Dashboard 10 biểu đồ"]
         end
     end
 
@@ -481,9 +506,11 @@ flowchart TB
 
 | STT | Service gọi | Service nhận | Endpoint nội bộ (`X-Internal-Key`) | Mục đích nghiệp vụ |
 | :---: | :--- | :--- | :--- | :--- |
-| **1** | `order-service` | `menu-service` | `POST /internal/menu/validate-items` | Lấy giá gốc tại server và kiểm tra món còn bán tại chi nhánh. |
+| **1** | `order-service` | `menu-service` | `GET /internal/items?station_id=&ids=` | Lấy tên, giá gốc, số phút làm và kiểm tra món còn bán tại chi nhánh. |
+| **1b** | `order-service` | `menu-service` | `GET /internal/stations` | Lấy số đơn bếp làm cùng lúc của từng cửa hàng để ước lượng thời gian chờ (lỗi thì dùng mặc định 2, không chặn đặt đơn). |
 | **2** | `payment-service` | `order-service` | `GET /internal/orders/{id}` & `POST .../payment-confirmed` | Lấy số tiền cần thu và chuyển đơn sang `CONFIRMED` sau khi MoMo báo thành công. |
-| **3** | `order-service` | `payment-service` | `POST /internal/payments/refund` | Tự động hoàn tiền về ví MoMo khi khách hủy đơn đã thanh toán trước khi bếp làm. |
+| **3** | `order-service` | `payment-service` | `POST /internal/payments/order/{id}/refund` | Tự động hoàn tiền về ví MoMo khi khách hủy đơn đã thanh toán trước khi bếp làm. |
+| **3b** | `order-service` | `payment-service` | `GET /internal/payments/order/{id}/paid` | Kiểm tra đơn đã thu tiền chưa: chặn hoàn thành đơn tiền mặt chưa thu, chặn đổi phương thức khi đã trả. |
 | **4** | `feedback-service` | `order-service` | `GET /internal/orders/{id}` | Xác minh đơn hàng đã `COMPLETED` và đúng chủ sở hữu trước khi cho phép đánh giá. |
 
 ---
