@@ -1,0 +1,105 @@
+/* ========== Icon SVG dùng chung ========== */
+.icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+/* Chữ đi kèm icon: căn giữa theo hàng */
+.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.star-row {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.star-fill {
+  color: #f0a500;
+}
+
+.star-empty {
+  color: #d9cfc0;
+}
+
+/* Nút sao khi chấm điểm (ReviewBox) */
+.star {
+  display: inline-grid;
+  place-items: center;
+  color: #d9cfc0;
+  transition: transform 0.1s ease, color 0.1s ease;
+}
+
+.star:not(:disabled):hover {
+  transform: scale(1.12);
+}
+
+.star-on {
+  color: #f0a500;
+}
+
+/* Biểu tượng bước trên trang chủ */
+.step-icon {
+  color: var(--brand);
+}
+
+/* Ảnh món khi chưa có ảnh */
+.admin-thumb .icon {
+  color: var(--tone-ink, var(--brand));
+}
+
+/* Kết quả thanh toán */
+.pay-icon .icon {
+  color: #fff;
+}
+
+.progress-dot .icon {
+  color: inherit;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--ink);
+}
+
+.station-cta,
+.active-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.station-cta .icon,
+.active-more .icon {
+  transition: transform 0.15s ease;
+}
+
+.station-card:hover .station-cta .icon {
+  transform: translateX(3px);
+}
+
+.ticket-flag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.review-score .star-fill {
+  margin-right: 2px;
+}

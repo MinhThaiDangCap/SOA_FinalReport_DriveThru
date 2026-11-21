@@ -1,16 +1,20 @@
+import { categoryStyle } from '../categoryStyle.js'
 import { MAX_QUANTITY } from '../context/CartContext.jsx'
 import { formatPrice } from '../format.js'
+import Icon from './Icon.jsx'
 
-export default function MenuItemCard({ item, quantity, onAdd, onSetQuantity }) {
+/** category: tên danh mục gốc (từ DB) để chọn icon và màu khi món chưa có ảnh. */
+export default function MenuItemCard({ item, category, quantity, onAdd, onSetQuantity }) {
   const soldOut = !item.available
+  const look = categoryStyle(category)
 
   return (
     <article className={soldOut ? 'item-card sold-out' : 'item-card'}>
-      <div className="item-thumb">
+      <div className={`item-thumb tone-${look.tone}`}>
         {item.image_url ? (
           <img src={item.image_url} alt="" loading="lazy" />
         ) : (
-          <span aria-hidden="true">{item.name.charAt(0)}</span>
+          <Icon name={look.icon} size={40} strokeWidth={1.5} />
         )}
         {soldOut && <span className="sold-out-tag">Hết hàng</span>}
       </div>

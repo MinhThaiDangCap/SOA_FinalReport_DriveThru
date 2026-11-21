@@ -5,7 +5,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from app import models  # noqa: F401
 from app.database import Base, engine
-from app.routers import payments
+from app.routers import internal, payments
 
 
 @asynccontextmanager
@@ -19,6 +19,7 @@ app = FastAPI(title="Payment Service", version="1.0.0", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
 
 app.include_router(payments.router)
+app.include_router(internal.router)
 
 
 @app.get("/health", tags=["system"])

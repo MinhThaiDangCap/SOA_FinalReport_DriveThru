@@ -28,7 +28,7 @@ class PaymentOut(BaseModel):
     amount: int
     status: str
     txn_ref: str
-    vnp_transaction_no: str | None
+    transaction_no: str | None
     bank_code: str | None
     note: str | None
     created_at: datetime

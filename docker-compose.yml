@@ -1,0 +1,202 @@
+services:
+  # 1. PostgreSQL 16 (1 container, 5 database riêng biệt cho 5 microservices)
+  # Mỗi service có tài khoản riêng, chỉ vào được database của mình (init-dbs.sh).
+  # Tài khoản admin chỉ để quản trị / xem dữ liệu, các service không dùng.
+  postgres:
+    image: postgres:16
+    container_name: drivethru_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secretpassword
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-auth_secret}
+      MENU_DB_PASSWORD: ${MENU_DB_PASSWORD:-menu_secret}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_secret}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_secret}
+      FEEDBACK_DB_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Auth Service (Đăng ký, Đăng nhập, JWT, Quản lý Nhân viên)
+  auth-service:
+    build: ./auth-service
+    container_name: drivethru_auth
+    restart: always
+    environment:
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-auth_secret}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      AUTH_DB: auth_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 3. Feedback Service (Đánh giá 1-5 sao, Thống kê Admin)
+  feedback-service:
+    build: ./feeback-service
+    container_name: drivethru_feedback
+    restart: always
+    environment:
+      POSTGRES_USER: feedback_user
+      POSTGRES_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_secret}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      FEEDBACK_DB: feedback_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+      ORDER_SERVICE_URL: http://order-service:8000
+      ORDER_SERVICE_FALLBACK: "false"
+    ports:
+      - "8005:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 4. Menu Service (Cửa hàng, Danh mục, Món ăn)
+  menu-service:
+    build: ./services/menu-service
+    container_name: drivethru_menu
+    restart: always
+    environment:
+      POSTGRES_USER: menu_user
+      POSTGRES_PASSWORD: ${MENU_DB_PASSWORD:-menu_secret}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      MENU_DB: menu_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # 5. Order Service (Đặt đơn, hàng đợi, trạng thái đơn)
+  order-service:
+    build: ./services/order-service
+    container_name: drivethru_order
+    restart: always
+    environment:
+      POSTGRES_USER: order_user
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-order_secret}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      ORDER_DB: order_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+      MENU_SERVICE_URL: http://menu-service:8000
+      PAYMENT_SERVICE_URL: http://payment-service:8000
+      MENU_MOCK: "false"
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      menu-service:
+        condition: service_started
+
+  # 6. Payment Service (MoMo, tiền mặt)
+  payment-service:
+    build: ./services/payment-service
+    container_name: drivethru_payment
+    restart: always
+    environment:
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_secret}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      PAYMENT_DB: payment_db
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_drivethru_2026}
+      INTERNAL_KEY: ${INTERNAL_KEY:-change_me_internal_key}
+      ORDER_SERVICE_URL: http://order-service:8000
+      PAYMENT_MOCK_MODE: ${PAYMENT_MOCK_MODE:-false}
+      # true = trang kết quả cũng xử lý giao dịch (cần khi chạy máy cá nhân, MoMo không gọi IPN vào localhost được)
+      MOMO_PROCESS_ON_RETURN: ${MOMO_PROCESS_ON_RETURN:-true}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8004}
+      # Để trống = dùng bộ key test công khai của MoMo sandbox (xem app/config.py)
+      MOMO_PARTNER_CODE: ${MOMO_PARTNER_CODE:-}
+      MOMO_ACCESS_KEY: ${MOMO_ACCESS_KEY:-}
+      MOMO_SECRET_KEY: ${MOMO_SECRET_KEY:-}
+      MOMO_ENDPOINT: ${MOMO_ENDPOINT:-https://test-payment.momo.vn}
+      MOMO_REDIRECT_URL: ${MOMO_REDIRECT_URL:-http://localhost:8080/payment/result}
+      MOMO_IPN_URL: ${MOMO_IPN_URL:-}
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+
+  # 7. Gateway: giao diện web + định tuyến API
+  gateway:
+    build: ./frontend
+    container_name: drivethru_gateway
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - auth-service
+      - menu-service
+      - order-service
+      - payment-service
+      - feedback-service
+
+  # 8. Đường hầm ra Internet (chỉ bật khi cần demo/IPN: --profile tunnel)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: drivethru_ngrok
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: ["http", "--url=${NGROK_DOMAIN}", "gateway:80"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+    depends_on:
+      - gateway
+
+  # 9. Prometheus (Thu thập metrics từ toàn bộ microservices)
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: drivethru_prometheus
+    restart: always
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  # 10. Grafana (Dashboard giám sát tự động nạp sẵn)
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: drivethru_grafana
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  grafanadata:

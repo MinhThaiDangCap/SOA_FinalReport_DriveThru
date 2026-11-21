@@ -1,0 +1,401 @@
+import logging
+from datetime import datetime, timedelta
+from typing import List
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter
+
+from database import engine, Base, SessionLocal, get_db
+from models import User, RefreshToken
+from schemas import (
+    RegisterRequest,
+    LoginRequest,
+    CreateStaffRequest,
+    RefreshRequest,
+    UserResponse,
+    TokenResponse,
+)
+from security import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    generate_random_token,
+    get_current_user,
+    verify_internal_key,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("auth-service")
+
+# Custom Prometheus Business Metrics
+AUTH_LOGINS_TOTAL = Counter(
+    "auth_logins_total",
+    "Total login attempts by role and status",
+    ["role", "status"],
+)
+AUTH_REGISTRATIONS_TOTAL = Counter(
+    "auth_registrations_total",
+    "Total new customer registrations",
+)
+
+
+def seed_default_accounts():
+    """Tự động tạo sẵn các tài khoản mẫu (ADMIN, Nhân viên, Khách hàng) để demo và xem ngay trong TablePlus."""
+    db = SessionLocal()
+    try:
+        samples = [
+            {
+                "email": "admin@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Quản Trị Viên Hệ Thống",
+                "phone": "0901111111",
+                "role": "ADMIN",
+                "station_id": None,
+            },
+            {
+                "email": "staff1@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Trần Văn Bếp (CN Quận 7)",
+                "phone": "0902222222",
+                "role": "STAFF",
+                "station_id": 1,  # GoLane Quận 7 (xem menu-service/app/seed.py)
+            },
+            {
+                "email": "staff2@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Lê Thị Thu Ngân (CN Thủ Đức)",
+                "phone": "0903333333",
+                "role": "STAFF",
+                "station_id": 2,  # GoLane Thủ Đức
+            },
+            {
+                "email": "staff3@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Phạm Minh Khoa (CN Bình Thạnh)",
+                "phone": "0904444444",
+                "role": "STAFF",
+                "station_id": 3,  # GoLane Bình Thạnh
+            },
+            {
+                "email": "khachhang@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Nguyễn Hữu Tân (Khách Hàng)",
+                "phone": "0909999999",
+                "role": "CUSTOMER",
+                "station_id": None,
+            },
+        ]
+        for acc in samples:
+            exists = db.query(User).filter(User.email == acc["email"]).first()
+            if exists:
+                exists.full_name = acc["full_name"]
+                exists.role = acc["role"]
+                exists.station_id = acc["station_id"]
+            else:
+                user = User(
+                    email=acc["email"],
+                    hashed_password=hash_password(acc["password"]),
+                    full_name=acc["full_name"],
+                    phone=acc["phone"],
+                    role=acc["role"],
+                    station_id=acc["station_id"],
+                )
+                db.add(user)
+        db.commit()
+        logger.info(">>> Đã kiểm tra và tạo sẵn các tài khoản mẫu trong auth_db!")
+    except Exception as e:
+        logger.warning(f"Không thể seed dữ liệu mẫu: {e}")
+    finally:
+        db.close()
+
+
+def drop_removed_columns():
+    """Database tạo trước khi bỏ Telegram còn 2 cột liên kết Telegram: xóa đi.
+
+    Chạy mỗi lần khởi động nhưng an toàn (IF EXISTS). Index của cột bị xóa theo.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    with engine.begin() as conn:
+        conn.execute(text(
+            "ALTER TABLE users DROP COLUMN IF EXISTS telegram_chat_id, "
+            "DROP COLUMN IF EXISTS telegram_link_token"
+        ))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        Base.metadata.create_all(bind=engine)
+        drop_removed_columns()
+        seed_default_accounts()
+        logger.info(">>> Kết nối auth_db và tạo bảng thành công!")
+    except Exception as e:
+        logger.error(f"Lỗi kết nối auth_db: {e}")
+    yield
+
+
+app = FastAPI(
+    title="GoLane Auth Service",
+    description="Dịch vụ Đăng ký, Đăng nhập, Quản lý Nhân viên và Phân quyền JWT",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+Instrumentator().instrument(app).expose(app)
+
+
+# ===== 1. ĐĂNG KÝ KHÁCH HÀNG =====
+@app.post(
+    "/api/auth/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Authentication"],
+    summary="Đăng ký tài khoản Khách hàng",
+)
+def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == req.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email này đã được sử dụng. Vui lòng chọn email khác.",
+        )
+
+    new_user = User(
+        email=req.email,
+        hashed_password=hash_password(req.password),
+        full_name=req.full_name,
+        phone=req.phone,
+        role="CUSTOMER",
+        station_id=None,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    AUTH_REGISTRATIONS_TOTAL.inc()
+    return new_user
+
+
+# ===== 2. ĐĂNG NHẬP & CẤP JWT + REFRESH TOKEN =====
+@app.post(
+    "/api/auth/login",
+    response_model=TokenResponse,
+    tags=["Authentication"],
+    summary="Đăng nhập và nhận JWT Access Token + Refresh Token",
+)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user or not verify_password(req.password, user.hashed_password):
+        AUTH_LOGINS_TOTAL.labels(role="unknown", status="failed").inc()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email hoặc mật khẩu không chính xác.",
+        )
+
+    if not user.is_active:
+        AUTH_LOGINS_TOTAL.labels(role=user.role, status="locked").inc()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tài khoản này đã bị khóa.",
+        )
+
+    token_payload = {
+        "sub": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role,
+        "station_id": user.station_id,
+    }
+    access_token = create_access_token(data=token_payload)
+
+    # Lưu Refresh Token vào bảng refresh_tokens
+    raw_refresh = generate_random_token(32)
+    refresh_record = RefreshToken(
+        user_id=user.id,
+        token=raw_refresh,
+        expires_at=datetime.utcnow() + timedelta(days=7),
+        revoked=False,
+    )
+    db.add(refresh_record)
+    db.commit()
+
+    AUTH_LOGINS_TOTAL.labels(role=user.role, status="success").inc()
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=raw_refresh,
+        token_type="bearer",
+        user=user,
+    )
+
+
+# ===== 3. LÀM MỚI ACCESS TOKEN BẰNG REFRESH TOKEN =====
+@app.post(
+    "/api/auth/refresh",
+    response_model=TokenResponse,
+    tags=["Authentication"],
+    summary="Cấp lại Access Token mới từ Refresh Token",
+)
+def refresh_access_token(req: RefreshRequest, db: Session = Depends(get_db)):
+    record = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token == req.refresh_token, RefreshToken.revoked == False)
+        .first()
+    )
+    if not record or record.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token không hợp lệ hoặc đã hết hạn.",
+        )
+
+    user = db.query(User).filter(User.id == record.user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
+
+    token_payload = {
+        "sub": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role,
+        "station_id": user.station_id,
+    }
+    new_access_token = create_access_token(data=token_payload)
+
+    return TokenResponse(
+        access_token=new_access_token,
+        refresh_token=record.token,
+        token_type="bearer",
+        user=user,
+    )
+
+
+# ===== 4. LẤY THÔNG TIN TÀI KHOẢN HIỆN TẠI =====
+@app.get(
+    "/api/auth/me",
+    response_model=UserResponse,
+    tags=["Authentication"],
+    summary="Xem thông tin người dùng đang đăng nhập",
+)
+def get_me(
+    current_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = int(current_payload.get("sub"))
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
+    return user
+
+
+# ===== 5. QUẢN LÝ NHÂN VIÊN (DÀNH CHO ADMIN) =====
+@app.post(
+    "/api/auth/staff",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["STAFF Management (ADMIN)"],
+    summary="[ADMIN] Tạo tài khoản nhân viên gán theo cửa hàng (station)",
+)
+def create_staff(
+    req: CreateStaffRequest,
+    current_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_payload.get("role") != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ Quản trị viên (ADMIN) mới có quyền tạo tài khoản nhân viên.",
+        )
+
+    if db.query(User).filter(User.email == req.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email nhân viên này đã tồn tại.",
+        )
+
+    new_staff = User(
+        email=req.email,
+        hashed_password=hash_password(req.password),
+        full_name=req.full_name,
+        phone=req.phone,
+        role="STAFF",
+        station_id=req.station_id,
+    )
+    db.add(new_staff)
+    db.commit()
+    db.refresh(new_staff)
+    return new_staff
+
+
+@app.get(
+    "/api/auth/staff",
+    response_model=List[UserResponse],
+    tags=["STAFF Management (ADMIN)"],
+    summary="[ADMIN] Lấy danh sách toàn bộ nhân viên",
+)
+def list_staff(
+    current_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_payload.get("role") != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ ADMIN mới được xem danh sách nhân viên.",
+        )
+    return db.query(User).filter(User.role == "STAFF").order_by(User.id.asc()).all()
+
+
+@app.patch(
+    "/api/auth/staff/{staff_id}/toggle-active",
+    response_model=UserResponse,
+    tags=["STAFF Management (ADMIN)"],
+    summary="[ADMIN] Khóa hoặc mở khóa tài khoản nhân viên",
+)
+def toggle_staff_status(
+    staff_id: int,
+    current_payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_payload.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Chỉ ADMIN mới có quyền thực hiện.")
+    staff = db.query(User).filter(User.id == staff_id, User.role == "STAFF").first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên.")
+    staff.is_active = not staff.is_active
+    db.commit()
+    db.refresh(staff)
+    return staff
+
+
+# ===== 6. INTERNAL APIs (CHỈ CÁC MICROSERVICE GỌI NỘI BỘ) =====
+@app.get(
+    "/internal/auth/users/{user_id}",
+    response_model=UserResponse,
+    tags=["Internal Service-to-Service"],
+    summary="[Internal] Lấy thông tin user cho order-service / feedback-service",
+)
+def get_user_internal(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _ok: bool = Depends(verify_internal_key),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User không tồn tại.")
+    return user
+
+
+@app.get("/health", tags=["Health"])
+def health():
+    return {"status": "healthy", "service": "auth-service"}

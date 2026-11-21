@@ -9,7 +9,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api/menu': 'http://localhost:8002',
+      '/api/auth':     'http://localhost:8001',
+      '/api/menu':     'http://localhost:8002',
+      '/api/orders':   'http://localhost:8003',
+      '/api/payments': 'http://localhost:8004',
+      '/api/reviews':  'http://localhost:8005',
     },
   },
 })

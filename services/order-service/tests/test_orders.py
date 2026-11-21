@@ -63,3 +63,242 @@ def test_invalid_transition_returns_409(client):
 def test_customer_cannot_see_other_customers_order(client):
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
     assert client.get(f"/api/orders/{oid}", headers=auth(11, "CUSTOMER")).status_code == 403
+
+# ---------- Hủy đơn MoMo đã trả: phải hoàn tiền trước ----------
+from fastapi import HTTPException
+from app import payment_client
+
+
+def paid_momo_order(client):
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = client.post(f"/internal/orders/{oid}/payment-confirmed",
+                    json={"transaction_ref": "123"}, headers={"X-Internal-Key": "ik"})
+    assert r.status_code == 200 and r.json()["status"] == "CONFIRMED"
+    return oid
+
+
+def test_cancel_paid_momo_order_refunds_first(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(payment_client, "refund_order",
+                        lambda oid: calls.append(oid) or {"refunded": True, "amount": 90000})
+    oid = paid_momo_order(client)
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200 and r.json()["status"] == "CANCELLED"
+    assert calls == [oid]
+    assert r.json()["history"][-1]["note"] == "Khách hủy đơn, đã hoàn 90.000đ về ví MoMo"
+
+
+def test_cancel_kept_when_refund_fails(client, monkeypatch):
+    def fail(oid):
+        raise HTTPException(status_code=502, detail="MoMo chưa hoàn tiền được")
+    monkeypatch.setattr(payment_client, "refund_order", fail)
+    oid = paid_momo_order(client)
+    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 502
+    assert client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()["status"] == "CONFIRMED"
+
+
+def test_cancel_unpaid_or_cash_order_skips_refund(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "refund_order", lambda oid: pytest.fail("không được gọi"))
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200
+
+
+# ---------- Đơn tiền mặt: phải thu tiền rồi mới hoàn thành ----------
+def ready_cash_order(client):
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    for s in ("PREPARING", "READY"):
+        assert client.patch(f"/api/orders/{oid}/status", json={"status": s},
+                            headers=auth(20, "STAFF", 1)).status_code == 200
+    return oid
+
+
+def test_cash_order_needs_payment_before_completed(client, monkeypatch):
+    paid = {"v": False}
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: paid["v"])
+    oid = ready_cash_order(client)
+    r = client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
+    assert r.status_code == 409 and "thu tiền" in r.json()["detail"]
+    paid["v"] = True
+    r = client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
+    assert r.status_code == 200 and r.json()["status"] == "COMPLETED"
+
+
+def test_admin_stats_and_recent(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    oid = ready_cash_order(client)
+    client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
+    client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))  # 1 đơn đang chờ
+
+    assert client.get("/api/orders/stats", headers=auth(20, "STAFF", 1)).status_code == 403
+    stats = client.get("/api/orders/stats", headers=auth(1, "ADMIN")).json()
+    assert stats == [{"station_id": 1, "total_orders": 2, "active_orders": 1, "completed_orders": 1,
+                      "cancelled_orders": 0, "revenue": 90000, "today_orders": stats[0]["today_orders"],
+                      "today_revenue": stats[0]["today_revenue"]}]
+
+    recent = client.get("/api/orders/recent", headers=auth(20, "STAFF", 1)).json()
+    assert [o["id"] for o in recent] == [oid]
+    assert client.get("/api/orders/recent", headers=auth(20, "STAFF", 2)).json() == []
+
+
+def test_wait_times_public(client):
+    for _ in range(3):
+        client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))
+    r = client.get("/api/orders/wait-times")  # không cần token
+    assert r.status_code == 200
+    # Mỗi đơn 2 burger = 5 phút; 3 đơn = 15 phút, bếp làm 2 đơn cùng lúc -> chờ 8 phút
+    # + 5 phút cho một đơn điển hình
+    assert r.json() == [{"station_id": 1, "queue_count": 3, "estimated_minutes": 13}]
+
+
+# ---------- Đổi phương thức thanh toán ----------
+def change_method(client, oid, method, uid=10):
+    return client.patch(f"/api/orders/{oid}/payment-method", json={"payment_method": method},
+                        headers=auth(uid, "CUSTOMER"))
+
+
+def test_switch_momo_to_cash_and_back(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+
+    r = change_method(client, oid, "CASH")
+    assert r.status_code == 200
+    assert (r.json()["payment_method"], r.json()["status"]) == ("CASH", "CONFIRMED")
+    assert r.json()["history"][-1]["note"] == "Khách đổi sang trả tại quầy"
+
+    r = change_method(client, oid, "MOMO")
+    assert (r.json()["payment_method"], r.json()["status"]) == ("MOMO", "PENDING_PAYMENT")
+    assert change_method(client, oid, "MOMO").status_code == 200  # giữ nguyên, không lỗi
+    assert change_method(client, oid, "CASH", uid=11).status_code == 403  # đơn người khác
+
+
+def test_cannot_switch_after_paid_or_started(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
+    oid = paid_momo_order(client)  # MoMo đã trả -> CONFIRMED
+    assert change_method(client, oid, "CASH").status_code == 409
+
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"}, headers=auth(20, "STAFF", 1))
+    assert change_method(client, oid, "MOMO").status_code == 409
+
+    # MoMo vừa báo đã trả nhưng đơn chưa kịp cập nhật
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert change_method(client, oid, "CASH").status_code == 409
+
+
+def test_late_momo_payment_after_switching_to_cash(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
+    body = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    change_method(client, oid, "CASH")
+    r = client.post(f"/internal/orders/{oid}/payment-confirmed",
+                    json={"transaction_ref": "1"}, headers={"X-Internal-Key": "ik"})
+    assert r.status_code == 200
+    order = client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()
+    assert (order["payment_method"], order["status"]) == ("MOMO", "CONFIRMED")
+
+
+# ---------- Khách tới sớm: chỉ ghi giờ đến, không nhảy qua bước bếp ----------
+STAFF1 = auth(20, "STAFF", 1)
+
+
+def set_status(client, oid, status):
+    return client.patch(f"/api/orders/{oid}/status", json={"status": status}, headers=STAFF1)
+
+
+def test_early_arrival_keeps_kitchen_status(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    set_status(client, oid, "PREPARING")
+
+    r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200
+    assert r.json()["status"] == "PREPARING" and r.json()["arrived_at"] is not None
+    assert r.json()["history"][-1]["note"] == "Khách báo đã tới quầy"
+
+    # Bấm lại: không lỗi, không ghi thêm lịch sử
+    again = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER")).json()
+    assert len(again["history"]) == len(r.json()["history"])
+
+    # Món chưa xong thì không giao được, phải qua READY
+    assert set_status(client, oid, "COMPLETED").status_code == 409
+    assert set_status(client, oid, "READY").status_code == 200
+    assert set_status(client, oid, "COMPLETED").status_code == 200
+
+
+def test_arrival_rules(client):
+    momo = {**BODY, "payment_method": "MOMO"}
+    oid = client.post("/api/orders", json=momo, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 409 and "chưa được thanh toán" in r.json()["detail"]
+
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    assert client.post(f"/api/orders/{oid}/arrived", headers=auth(11, "CUSTOMER")).status_code == 403
+    r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200 and r.json()["status"] == "CONFIRMED"  # tới trước khi bếp làm
+
+
+def test_cannot_cancel_once_store_started(client):
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
+    client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"}, headers=auth(20, "STAFF", 1))
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 409
+    assert r.json()["detail"] == "Cửa hàng đã bắt đầu làm món nên không thể hủy đơn nữa."
+
+
+# ---------- Ước lượng giờ xong đơn ----------
+from datetime import datetime, timezone
+
+from app.estimate import order_prep_minutes
+
+
+def minutes_from_now(iso: str) -> float:
+    dt = datetime.fromisoformat(iso)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (dt - datetime.now(timezone.utc)).total_seconds() / 60
+
+
+def test_order_prep_minutes_formula():
+    assert order_prep_minutes([]) == 0
+    assert order_prep_minutes([(5, 1)]) == 5              # 1 burger
+    assert order_prep_minutes([(5, 2)]) == 5              # thêm 1 phần: chưa cộng
+    assert order_prep_minutes([(5, 2), (2, 3)]) == 7      # món lâu nhất 5 + 4 phần thêm / 2
+
+
+def test_estimate_counts_orders_ahead(client):
+    first = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()
+    assert first["prep_minutes"] == 5
+    assert first["items"][0]["prep_minutes"] == 5
+    assert 4.9 < minutes_from_now(first["estimated_ready_at"]) <= 5      # bếp đang trống
+
+    second = client.post("/api/orders", json=BODY, headers=auth(11, "CUSTOMER")).json()
+    # chờ đơn trước: 5 phút / 2 đơn cùng lúc = 3 phút (làm tròn lên), cộng 5 phút làm
+    assert 7.9 < minutes_from_now(second["estimated_ready_at"]) <= 8
+
+
+def test_momo_estimate_set_only_after_payment(client):
+    body = {**BODY, "payment_method": "MOMO"}
+    created = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()
+    assert created["estimated_ready_at"] is None                         # chưa trả tiền
+
+    paid = client.post(f"/internal/orders/{created['id']}/payment-confirmed",
+                       json={"transaction_ref": "1"}, headers={"X-Internal-Key": "ik"})
+    assert paid.json()["status"] == "CONFIRMED"
+    order = client.get(f"/api/orders/{created['id']}", headers=auth(10, "CUSTOMER")).json()
+    assert 4.9 < minutes_from_now(order["estimated_ready_at"]) <= 5
+
+
+def test_estimate_resets_when_kitchen_starts(client):
+    client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))
+    oid = client.post("/api/orders", json=BODY, headers=auth(11, "CUSTOMER")).json()["id"]
+    r = client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"},
+                     headers=auth(20, "STAFF", 1))
+    # bếp bắt đầu làm đơn này: không còn phải chờ đơn trước, xong sau 5 phút
+    assert 4.9 < minutes_from_now(r.json()["estimated_ready_at"]) <= 5

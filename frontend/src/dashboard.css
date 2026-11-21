@@ -1,0 +1,635 @@
+/* ========== Màn hình nhân viên & admin ========== */
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 22px 26px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #fff3ef 0%, #ffffff 65%, #fff9e6 100%);
+  border: 1px solid #f0dfd6;
+  box-shadow: var(--shadow);
+}
+
+.dash-head h1 {
+  font-size: 1.65rem;
+  margin-top: 2px;
+}
+
+.dash-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.dash-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.25);
+  animation: pulse 1.5s infinite;
+}
+
+.dash-eyebrow {
+  color: var(--brand);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dash-tabs {
+  position: static;
+  margin: 0 0 20px;
+  padding: 4px 0;
+  background: transparent;
+}
+
+.dash-tabs .tab {
+  padding: 9px 18px;
+  transition: all 0.15s ease;
+}
+
+.dash-tabs .tab:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.dash-tabs .tab.active {
+  box-shadow: 0 4px 12px rgba(217, 56, 30, 0.25);
+}
+
+.picker select,
+.field select,
+.field textarea,
+.inline-form input {
+  font: inherit;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+/* --- Bảng đơn kiểu cột --- */
+.board-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.new-badge {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 700;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.board-col {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-top: 4px solid #2563eb;
+  border-radius: 18px;
+  padding: 16px;
+  min-height: 280px;
+}
+
+.board-col h2 .badge {
+  background: #2563eb;
+}
+
+.board-col:nth-child(2) {
+  background: #fffbeb;
+  border-color: #fde68a;
+  border-top-color: #d97706;
+}
+
+.board-col:nth-child(2) h2 .badge {
+  background: #d97706;
+}
+
+.board-col:nth-child(3) {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  border-top-color: #16a34a;
+}
+
+.board-col:nth-child(3) h2 .badge {
+  background: #16a34a;
+}
+
+.board-col h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.05rem;
+}
+
+.board-empty {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+  padding: 28px 0;
+}
+
+.ticket-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ticket {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.ticket:hover {
+  transform: translateY(-2px);
+}
+
+.ticket-arrived {
+  border: 2px solid var(--brand);
+  background: linear-gradient(180deg, #fff9f8 0%, #ffffff 100%);
+}
+
+.ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ticket-plate {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: #fef08a;
+  color: #1c1917;
+  border: 2px solid #1c1917;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.ticket-id {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ticket-flag {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ticket-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 15px;
+}
+
+.ticket-meta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ticket-late {
+  color: var(--brand-dark);
+  font-weight: 700;
+}
+
+.recent {
+  margin-top: 20px;
+}
+
+.recent summary {
+  cursor: pointer;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* --- Bảng dữ liệu --- */
+.table-scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.table th,
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table tbody tr:hover {
+  background: #fdf9f4;
+}
+
+.table th {
+  background: #f6f0e8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.row-off {
+  opacity: 0.55;
+}
+
+/* --- Thống kê --- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfaf7 100%);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--brand);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(30, 27, 24, 0.09);
+}
+
+.stat-card:nth-child(2) { border-top-color: #2563eb; }
+.stat-card:nth-child(3) { border-top-color: #f59e0b; }
+.stat-card:nth-child(4) { border-top-color: #16a34a; }
+.stat-card:nth-child(5) { border-top-color: #0d9488; }
+.stat-card:nth-child(6) { border-top-color: #64748b; }
+
+.stat-card span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stat-card strong {
+  font-size: 1.55rem;
+  color: var(--ink);
+}
+
+.panel-title {
+  margin: 4px 0 10px;
+  font-size: 1.1rem;
+}
+
+.panel-hint {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 6px 0 12px;
+}
+
+.panel-section {
+  margin-bottom: 18px;
+}
+
+.panel-section h3 {
+  margin-bottom: 8px;
+}
+
+.panel-box {
+  padding: 14px;
+  margin-bottom: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.panel-toolbar .category-tabs {
+  margin: 0;
+}
+
+.panel-form {
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-bad {
+  color: var(--brand-dark);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* --- Danh sách quản trị --- */
+.admin-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.admin-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-item img,
+.admin-thumb {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--tone-bg, var(--brand-soft));
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  font-weight: 600;
+}
+
+.chip .link-btn {
+  font-size: 13px;
+}
+
+/* --- Còn / hết món --- */
+.avail-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.avail-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.avail-list li.avail-off {
+  background: #f4f1ed;
+}
+
+.avail-off strong {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.switch input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand);
+}
+
+/* --- Đánh giá --- */
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 22px 24px;
+  background: linear-gradient(135deg, #fffcf5 0%, #ffffff 100%);
+  border: 1px solid #f0e4cc;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.review-score {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding-right: 24px;
+  border-right: 1px dashed var(--line);
+}
+
+.review-score strong {
+  font-size: 2.8rem;
+  line-height: 1;
+  color: #b45309;
+}
+
+.review-score small {
+  color: var(--muted);
+}
+
+.review-bars {
+  flex: 1;
+  min-width: 200px;
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.review-bars li {
+  display: grid;
+  grid-template-columns: 32px 1fr 32px;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 999px;
+  background: #efe7dc;
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: #f0a500;
+}
+
+.review-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-list li {
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.review-list li.review-bad {
+  border-left: 4px solid var(--brand);
+}
+
+.review-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.review-stars {
+  color: #f0a500;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 860px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}

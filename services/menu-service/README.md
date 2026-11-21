@@ -58,7 +58,7 @@ Ví dụ `GET /api/menu/stations/1/menu`:
 
 ```json
 {
-  "station": {"id": 1, "name": "Drive-Thru Quận 7", "address": "...", "opening_hours": "06:00 - 23:00", "is_active": true},
+  "station": {"id": 1, "name": "GoLane Quận 7", "address": "...", "opening_hours": "06:00 - 23:00", "is_active": true},
   "categories": [
     {"id": 1, "name": "Burger", "items": [
       {"id": 1, "name": "Burger bò", "description": "...", "price": 45000, "image_url": null, "available": true}

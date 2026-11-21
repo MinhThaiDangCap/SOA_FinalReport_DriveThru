@@ -1,0 +1,3 @@
+# Script shell phải giữ xuống dòng kiểu Linux (LF), kể cả khi clone trên Windows,
+# nếu không container PostgreSQL sẽ lỗi khi chạy init-dbs.sh
+*.sh text eol=lf

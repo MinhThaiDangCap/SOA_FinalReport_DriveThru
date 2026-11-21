@@ -9,13 +9,26 @@ from sqlalchemy.orm import Session
 
 from app.models import Category, MenuItem, Station, StationItemAvailability
 
+# Tên thương hiệu của chuỗi cửa hàng (mô hình kinh doanh là drive-thru)
+BRAND = "GoLane"
+OLD_BRAND = "Drive-Thru"
+
 STATIONS = [
-    ("Drive-Thru Quận 7", "19 Nguyễn Hữu Thọ, P. Tân Phong, Quận 7, TP.HCM", "06:00 - 23:00"),
-    ("Drive-Thru Thủ Đức", "720A Xa lộ Hà Nội, TP. Thủ Đức, TP.HCM", "06:00 - 22:00"),
-    ("Drive-Thru Bình Thạnh", "208 Điện Biên Phủ, Quận Bình Thạnh, TP.HCM", "24/7"),
+    (f"{BRAND} Quận 7", "19 Nguyễn Hữu Thọ, P. Tân Phong, Quận 7, TP.HCM", "06:00 - 23:00"),
+    (f"{BRAND} Thủ Đức", "720A Xa lộ Hà Nội, TP. Thủ Đức, TP.HCM", "06:00 - 22:00"),
+    (f"{BRAND} Bình Thạnh", "208 Điện Biên Phủ, Quận Bình Thạnh, TP.HCM", "24/7"),
 ]
 
 CATEGORIES = ["Burger", "Gà rán", "Món ăn kèm", "Đồ uống", "Tráng miệng"]
+
+# Số phút làm 1 phần món, theo danh mục (dùng để ước lượng thời gian chờ)
+PREP_MINUTES_BY_CATEGORY = {
+    "Burger": 5,
+    "Gà rán": 7,
+    "Món ăn kèm": 3,
+    "Đồ uống": 2,
+    "Tráng miệng": 1,
+}
 
 # (danh mục, tên, mô tả, giá VND) — thứ tự quyết định id
 ITEMS = [
@@ -41,6 +54,33 @@ ITEMS = [
 SOLD_OUT = [(1, 4), (2, 15)]
 
 
+def rename_old_brand(db: Session) -> int:
+    """Database tạo trước khi đổi tên: "Drive-Thru Quận 7" -> "GoLane Quận 7". Trả về số cửa hàng đã đổi."""
+    changed = 0
+    for station in db.scalars(select(Station).where(Station.name.like(f"{OLD_BRAND} %"))):
+        station.name = BRAND + station.name[len(OLD_BRAND):]
+        changed += 1
+    if changed:
+        db.commit()
+    return changed
+
+
+def fill_prep_minutes(db: Session) -> int:
+    """Database tạo trước khi có prep_minutes: đặt số phút theo danh mục mẫu.
+
+    Chỉ gọi đúng một lần, ngay sau khi vừa thêm cột. Trả về số món đã cập nhật.
+    """
+    changed = 0
+    for item in db.scalars(select(MenuItem)):
+        minutes = PREP_MINUTES_BY_CATEGORY.get(item.category.name)
+        if minutes is not None and item.prep_minutes != minutes:
+            item.prep_minutes = minutes
+            changed += 1
+    if changed:
+        db.commit()
+    return changed
+
+
 def seed_if_empty(db: Session) -> bool:
     """Trả về True nếu đã thêm dữ liệu mẫu."""
     if db.scalar(select(Station.id).limit(1)) is not None:
@@ -63,6 +103,7 @@ def seed_if_empty(db: Session) -> bool:
                 name=name,
                 description=description,
                 price=price,
+                prep_minutes=PREP_MINUTES_BY_CATEGORY.get(cat_name, 3),
             )
         )
         db.flush()
