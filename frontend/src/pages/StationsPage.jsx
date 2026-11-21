@@ -246,7 +246,7 @@ export default function StationsPage() {
           />
           <div className="hero-floating-tag">
             <Icon name="check" size={16} />
-            <span>Nhận diện biển số xe chính xác 100%</span>
+            <span>Giao đúng xe theo biển số đã đặt</span>
           </div>
         </div>
       </section>
