@@ -73,6 +73,12 @@ export default function PaymentResultPage() {
       <p className="auth-sub">
         Đơn #{result.order_id} · {formatPrice(result.amount)}
       </p>
+      {tone === 'wait' && (
+        <p className="auth-sub">
+          MoMo chưa gửi xác nhận về hệ thống. Đơn sẽ tự chuyển sang "Đã xác nhận" khi MoMo báo
+          về; bạn không cần thanh toán lại.
+        </p>
+      )}
       <Link to={`/orders/${result.order_id}`} className="btn btn-block">
         Xem đơn hàng
       </Link>
