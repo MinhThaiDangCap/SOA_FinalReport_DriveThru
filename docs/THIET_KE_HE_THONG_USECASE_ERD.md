@@ -71,7 +71,7 @@ flowchart LR
 | **UC02** | Xem cửa hàng & Menu | Khách hàng | `menu-service` | Hiển thị cửa hàng đang mở, thực đơn kèm trạng thái còn/hết từng món. |
 | **UC03** | Đặt đơn Drive-Thru | Khách hàng | `order-service` | Nhập biển số xe, chọn `MOMO` hoặc `CASH`, kiểm tra giá từ `menu-service`, áp dụng coupon. |
 | **UC04** | Thanh toán MoMo | Khách hàng, MoMo | `payment-service` | Tạo link MoMo, xác thực chữ ký HMAC-SHA256, báo `order-service` sang `CONFIRMED`. |
-| **UC05** | Hủy đơn / Đổi PTTT | Khách hàng | `order-service`, `payment-service` | Chỉ hủy/đổi trước khi `PREPARING`. Đơn MoMo đã trả tiền sẽ hoàn ví trước khi hủy. |
+| **UC05** | Hủy đơn / Đổi PTTT | Khách hàng | `order-service`, `payment-service` | Hủy được trước khi bếp làm (`PREPARING`); đơn MoMo đã trả được hoàn tiền về ví trước khi hủy. Chỉ đơn MoMo **chưa trả tiền** đổi được sang trả tại quầy; đơn trả tại quầy đã gửi tới cửa hàng nên **không** đổi sang MoMo (không rút đơn khỏi hàng đợi của quầy). |
 | **UC03b** | Xem giờ xong dự kiến | Khách hàng, Nhân viên | `order-service`, `menu-service` | Tính từ số phút làm từng món (`prep_minutes`), các đơn đang chờ và số đơn bếp làm cùng lúc (`kitchen_capacity`); tính lại khi bếp bắt đầu làm. |
 | **UC06** | Báo "Tôi đã đến" | Khách hàng | `order-service` | Ghi `arrived_at` để đẩy thẻ xe lên đầu hàng đợi và bật chuông báo trên màn hình quầy. |
 | **UC07** | Đánh giá dịch vụ | Khách hàng | `feedback-service` | Chỉ đánh giá đơn `COMPLETED`, mỗi đơn 1 lần. Chấm 1–2 sao **bắt buộc** ghi lý do. |

@@ -55,7 +55,6 @@ export default function OrderPage() {
   const [reloadKey, setReloadKey] = useState(0)
   // Hộp thoại đang mở: 'cancel' | 'method' | null
   const [dialog, setDialog] = useState(null)
-  const [newMethod, setNewMethod] = useState('CASH')
 
   const status = order?.status
   const stationId = order?.station_id
@@ -117,17 +116,10 @@ export default function OrderPage() {
     }
   }
 
-  function openMethodDialog() {
-    setNewMethod(order.payment_method === 'MOMO' ? 'CASH' : 'MOMO')
-    setDialog('method')
-  }
-
-  async function handleChangeMethod() {
-    const updated = await runAction((id) => changePaymentMethod(id, newMethod))
-    // Đổi sang MoMo: đi thẳng tới trang thanh toán cho khách khỏi bấm thêm
-    if (updated?.payment_method === 'MOMO' && updated.status === 'PENDING_PAYMENT') {
-      await handlePay()
-    }
+  // Chỉ đổi được MoMo (chưa trả) -> trả tại quầy. Đơn trả tại quầy đã gửi tới cửa hàng
+  // nên không đổi sang MoMo (tránh rút đơn khỏi hàng đợi của quầy).
+  function handleChangeToCash() {
+    return runAction((id) => changePaymentMethod(id, 'CASH'))
   }
 
   async function handlePay() {
@@ -172,11 +164,8 @@ export default function OrderPage() {
     status === 'READY' || status === 'ARRIVED'
       ? 'Món đã xong, nhân viên đang mang ra xe cho bạn.'
       : 'Món đang được chuẩn bị, cửa hàng sẽ ưu tiên đơn của bạn. Vui lòng chờ tại làn nhận món.'
-  // Đổi được khi chưa trả tiền và quán chưa làm: MoMo đang chờ trả, hoặc tiền mặt chưa làm món
-  const canChangeMethod =
-    isCustomer &&
-    ((order.payment_method === 'MOMO' && status === 'PENDING_PAYMENT') ||
-      (order.payment_method === 'CASH' && status === 'CONFIRMED'))
+  // Chỉ đơn MoMo chưa trả tiền mới đổi được (sang trả tại quầy)
+  const canChangeToCash = isCustomer && order.payment_method === 'MOMO' && status === 'PENDING_PAYMENT'
   const paidMomoCancel = order.payment_method === 'MOMO' && status === 'CONFIRMED'
   const cashPaidAt =
     order.payment_method === 'CASH' && status === 'COMPLETED'
@@ -294,14 +283,14 @@ export default function OrderPage() {
           Tôi đã đến
         </button>
       )}
-      {canChangeMethod && (
+      {canChangeToCash && (
         <button
           type="button"
           className="btn btn-ghost btn-block order-action"
-          onClick={openMethodDialog}
+          onClick={() => setDialog('method')}
           disabled={busy}
         >
-          Đổi phương thức thanh toán
+          Đổi sang trả tại quầy
         </button>
       )}
       {canCancel && (
@@ -318,6 +307,8 @@ export default function OrderPage() {
         <p className="order-hint cancel-hint">
           Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món
           {paidMomoCancel ? ', tiền sẽ được hoàn về ví MoMo.' : '.'}
+          {order.payment_method === 'CASH' &&
+            ' Đơn trả tại quầy đã gửi tới cửa hàng nên không đổi được phương thức thanh toán; muốn trả online, hãy hủy đơn và đặt lại.'}
         </p>
       )}
 
@@ -340,40 +331,17 @@ export default function OrderPage() {
 
       {dialog === 'method' && (
         <ConfirmDialog
-          title="Đổi phương thức thanh toán"
-          confirmLabel={newMethod === 'MOMO' ? 'Đổi và thanh toán MoMo' : 'Đổi sang trả tại quầy'}
-          confirmDisabled={newMethod === order.payment_method}
+          title="Đổi sang trả tại quầy?"
+          confirmLabel="Đổi sang trả tại quầy"
+          cancelLabel="Giữ MoMo"
           busy={busy}
-          onConfirm={handleChangeMethod}
+          onConfirm={handleChangeToCash}
           onCancel={() => setDialog(null)}
         >
-          <fieldset className="option-group">
-            <legend>Chọn cách thanh toán cho đơn #{order.id}</legend>
-            <label className={`option ${newMethod === 'MOMO' ? 'option-on' : ''}`}>
-              <input
-                type="radio"
-                name="new-method"
-                checked={newMethod === 'MOMO'}
-                onChange={() => setNewMethod('MOMO')}
-              />
-              <span>
-                <strong>Thanh toán online (MoMo){order.payment_method === 'MOMO' && ' · đang chọn'}</strong>
-                <small>Trả ngay, cửa hàng chỉ làm món sau khi nhận được tiền</small>
-              </span>
-            </label>
-            <label className={`option ${newMethod === 'CASH' ? 'option-on' : ''}`}>
-              <input
-                type="radio"
-                name="new-method"
-                checked={newMethod === 'CASH'}
-                onChange={() => setNewMethod('CASH')}
-              />
-              <span>
-                <strong>Trả tại quầy{order.payment_method === 'CASH' && ' · đang chọn'}</strong>
-                <small>Cửa hàng làm món ngay, bạn trả tiền mặt khi nhận món</small>
-              </span>
-            </label>
-          </fieldset>
+          <p>
+            Đơn #{order.id} sẽ được gửi ngay tới cửa hàng. Bạn trả {formatPrice(order.total_amount)} tiền
+            mặt khi nhận món. Sau khi đổi sẽ không chuyển lại sang MoMo được.
+          </p>
         </ConfirmDialog>
       )}
 
