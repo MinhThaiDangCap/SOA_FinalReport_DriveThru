@@ -1,5 +1,6 @@
 /* ========== Trang chủ khách hàng ========== */
-.hero-home {
+/* .hero.hero-home: styles.css nạp sau và có .hero { padding: 24px 0 } nên phải ghi rõ cả 2 class */
+.hero.hero-home {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 56px;
@@ -522,7 +523,7 @@
 }
 
 @media (max-width: 860px) {
-  .hero-home {
+  .hero.hero-home {
     grid-template-columns: 1fr;
     padding: 22px;
   }

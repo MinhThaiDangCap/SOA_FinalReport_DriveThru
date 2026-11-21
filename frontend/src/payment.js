@@ -13,6 +13,10 @@ export async function payForOrder(orderId) {
     return `/orders/${orderId}`
   }
 
+  // Trước khi rời web, đổi địa chỉ của trang hiện tại thành trang đơn hàng.
+  // Khách bấm "Quay lại" trên trình duyệt (từ trang MoMo) sẽ về đúng đơn đang thanh toán,
+  // thay vì trang /checkout đã hết giỏ hàng. Trang đơn có sẵn nút thanh toán lại / đổi phương thức.
+  window.history.replaceState(window.history.state, '', `/orders/${orderId}`)
   window.location.assign(payment.payment_url)
   return null
 }

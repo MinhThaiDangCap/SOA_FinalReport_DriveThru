@@ -47,3 +47,15 @@ export function formatDateTime(iso) {
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 }
+
+/** 75 -> "1 giờ 15 phút", 4311 -> "2 ngày 23 giờ", 8 -> "8 phút" */
+export function formatDuration(minutes) {
+  const m = Math.max(0, Math.floor(minutes))
+  if (m < 60) return `${m} phút`
+  if (m < 1440) {
+    const rest = m % 60
+    return rest ? `${Math.floor(m / 60)} giờ ${rest} phút` : `${m / 60} giờ`
+  }
+  const hours = Math.floor((m % 1440) / 60)
+  return hours ? `${Math.floor(m / 1440)} ngày ${hours} giờ` : `${Math.floor(m / 1440)} ngày`
+}

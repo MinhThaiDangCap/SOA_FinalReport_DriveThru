@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { errorMessage } from '../api/client.js'
 import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../api/staff.js'
-import { formatDateTime, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
+import { formatDateTime, formatDuration, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Icon from './Icon.jsx'
 import NotificationBell from './NotificationBell.jsx'
@@ -167,7 +167,7 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
       {arrived && (
         <div className="ticket-flag">
           <Icon name="car" size={18} /> Xe đã tới
-          {carWait !== null && ` · chờ ${carWait} phút`}
+          {carWait !== null && ` · chờ ${formatDuration(carWait)}`}
           {order.status === 'PREPARING' && ' · làm nhanh'}
         </div>
       )}
@@ -182,7 +182,7 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
         {METHOD_LABEL[order.payment_method] || order.payment_method} · {formatPrice(order.total_amount)}
         {' · '}
         <span className={`with-icon${waited >= 15 ? ' ticket-late' : ''}`}>
-          <Icon name="clock" size={14} /> chờ {waited} phút
+          <Icon name="clock" size={14} /> chờ {formatDuration(waited)}
         </span>
         {showEstimate && (
           <>
