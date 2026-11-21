@@ -1,5 +1,0 @@
-CREATE DATABASE auth_db;
-CREATE DATABASE feedback_db;
-CREATE DATABASE menu_db;
-CREATE DATABASE order_db;
-CREATE DATABASE payment_db;

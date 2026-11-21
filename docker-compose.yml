@@ -1,5 +1,7 @@
 services:
   # 1. PostgreSQL 16 (1 container, 5 database riêng biệt cho 5 microservices)
+  # Mỗi service có tài khoản riêng, chỉ vào được database của mình (init-dbs.sh).
+  # Tài khoản admin chỉ để quản trị / xem dữ liệu, các service không dùng.
   postgres:
     image: postgres:16
     container_name: drivethru_postgres
@@ -7,11 +9,16 @@ services:
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: secretpassword
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-auth_secret}
+      MENU_DB_PASSWORD: ${MENU_DB_PASSWORD:-menu_secret}
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:-order_secret}
+      PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_secret}
+      FEEDBACK_DB_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_secret}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./init-dbs.sql:/docker-entrypoint-initdb.d/init-dbs.sql
+      - ./init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
       interval: 5s
@@ -24,8 +31,8 @@ services:
     container_name: drivethru_auth
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-auth_secret}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       AUTH_DB: auth_db
@@ -43,8 +50,8 @@ services:
     container_name: drivethru_feedback
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_USER: feedback_user
+      POSTGRES_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_secret}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       FEEDBACK_DB: feedback_db
@@ -64,8 +71,8 @@ services:
     container_name: drivethru_menu
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_USER: menu_user
+      POSTGRES_PASSWORD: ${MENU_DB_PASSWORD:-menu_secret}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       MENU_DB: menu_db
@@ -83,8 +90,8 @@ services:
     container_name: drivethru_order
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_USER: order_user
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:-order_secret}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       ORDER_DB: order_db
@@ -107,8 +114,8 @@ services:
     container_name: drivethru_payment
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_secret}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       PAYMENT_DB: payment_db
