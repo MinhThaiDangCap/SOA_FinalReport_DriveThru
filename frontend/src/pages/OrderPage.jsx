@@ -116,19 +116,17 @@ export default function OrderPage() {
     }
   }
 
-  // Chỉ đổi được đơn online (chưa trả) -> trả tại quầy. Đơn trả tại quầy đã gửi tới cửa hàng
-  // nên không đổi sang trả online (tránh rút đơn khỏi hàng đợi của quầy).
+  // Chỉ đổi được đơn ZaloPay (chưa trả) -> trả tại quầy. Đơn trả tại quầy đã gửi tới cửa hàng
+  // nên không đổi sang ZaloPay (tránh rút đơn khỏi hàng đợi của quầy).
   function handleChangeToCash() {
     return runAction((id) => changePaymentMethod(id, 'CASH'))
   }
 
-  // Đơn online chưa trả: trả bằng ví đã chọn hoặc ví còn lại đều được
-  // (payment-service báo về order-service đúng ví khách đã dùng)
-  async function handlePay(method) {
+  async function handlePay() {
     setBusy(true)
     setNotice('')
     try {
-      const next = await payForOrder(order.id, method)
+      const next = await payForOrder(order.id)
       if (next) setReloadKey((k) => k + 1) // chế độ giả lập: tải lại để thấy trạng thái mới
     } catch (err) {
       setNotice(errorMessage(err))
@@ -157,11 +155,12 @@ export default function OrderPage() {
   const currentKey = status === 'ARRIVED' ? 'READY' : status
   const currentIndex = steps.indexOf(currentKey)
 
-  const isOnline = ['MOMO', 'ZALOPAY'].includes(order.payment_method)
-  const wallet = METHOD_LABEL[order.payment_method] || order.payment_method
-  const otherMethod = order.payment_method === 'ZALOPAY' ? 'MOMO' : 'ZALOPAY'
-  const needsPayment = status === 'PENDING_PAYMENT' && isOnline
-  const canCancel = isCustomer && ['PENDING_PAYMENT', 'CONFIRMED'].includes(status)
+  const isZaloPay = order.payment_method === 'ZALOPAY'
+  const needsPayment = status === 'PENDING_PAYMENT' && isZaloPay
+  // Đơn ZaloPay đã trả (CONFIRMED) không hủy trên ứng dụng: khách gọi hotline cửa hàng
+  const paidZaloPay = isZaloPay && status === 'CONFIRMED'
+  const canCancel =
+    isCustomer && (status === 'PENDING_PAYMENT' || (status === 'CONFIRMED' && !isZaloPay))
   // Xe tới quầy là cờ riêng (arrived_at): báo được từ lúc quán nhận đơn, không đổi tiến độ bếp
   const arrived = !!order.arrived_at || status === 'ARRIVED'
   const canArrive = isCustomer && !arrived && ['CONFIRMED', 'PREPARING', 'READY'].includes(status)
@@ -169,9 +168,8 @@ export default function OrderPage() {
     status === 'READY' || status === 'ARRIVED'
       ? 'Món đã xong, nhân viên đang mang ra xe cho bạn.'
       : 'Món đang được chuẩn bị, cửa hàng sẽ ưu tiên đơn của bạn. Vui lòng chờ tại làn nhận món.'
-  // Chỉ đơn online chưa trả tiền mới đổi được (sang trả tại quầy)
-  const canChangeToCash = isCustomer && isOnline && status === 'PENDING_PAYMENT'
-  const paidOnlineCancel = isOnline && status === 'CONFIRMED'
+  // Chỉ đơn ZaloPay chưa trả tiền mới đổi được (sang trả tại quầy)
+  const canChangeToCash = isCustomer && isZaloPay && status === 'PENDING_PAYMENT'
   const cashPaidAt =
     order.payment_method === 'CASH' && status === 'COMPLETED'
       ? order.history.find((h) => h.to_status === 'COMPLETED')?.changed_at
@@ -277,20 +275,10 @@ export default function OrderPage() {
         <button
           type="button"
           className="btn btn-block order-action"
-          onClick={() => handlePay(order.payment_method)}
+          onClick={handlePay}
           disabled={busy}
         >
-          {busy ? 'Đang xử lý...' : `Thanh toán ngay bằng ${wallet}`}
-        </button>
-      )}
-      {needsPayment && isCustomer && (
-        <button
-          type="button"
-          className="btn btn-ghost btn-block order-action"
-          onClick={() => handlePay(otherMethod)}
-          disabled={busy}
-        >
-          Trả bằng {METHOD_LABEL[otherMethod]} thay thế
+          {busy ? 'Đang xử lý...' : 'Thanh toán ngay bằng ZaloPay'}
         </button>
       )}
       {canArrive && (
@@ -325,10 +313,18 @@ export default function OrderPage() {
       )}
       {canCancel && (
         <p className="order-hint cancel-hint">
-          Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món
-          {paidOnlineCancel ? `, tiền sẽ được hoàn về ví ${wallet}.` : '.'}
+          Bạn có thể hủy đơn cho tới khi cửa hàng bắt đầu làm món.
+          {needsPayment &&
+            ' Sau khi thanh toán ZaloPay thành công, đơn sẽ không hủy được trên ứng dụng nữa.'}
           {order.payment_method === 'CASH' &&
             ' Đơn trả tại quầy đã gửi tới cửa hàng nên không đổi được phương thức thanh toán; muốn trả online, hãy hủy đơn và đặt lại.'}
+        </p>
+      )}
+      {isCustomer && paidZaloPay && (
+        <p className="order-hint cancel-hint">
+          Đơn đã thanh toán qua ZaloPay nên không thể hủy trên ứng dụng. Nếu muốn hủy đơn, vui
+          lòng liên hệ hotline cửa hàng <strong>1900 6868</strong> để được hỗ trợ hủy đơn và
+          hoàn tiền.
         </p>
       )}
 
@@ -341,11 +337,7 @@ export default function OrderPage() {
           onConfirm={() => runAction(cancelOrder)}
           onCancel={() => setDialog(null)}
         >
-          <p>
-            {paidOnlineCancel
-              ? `${formatPrice(order.total_amount)} sẽ được hoàn về ví ${wallet} của bạn.`
-              : 'Đơn sẽ bị hủy và cửa hàng không chuẩn bị món nữa.'}
-          </p>
+          <p>Đơn sẽ bị hủy và cửa hàng không chuẩn bị món nữa.</p>
         </ConfirmDialog>
       )}
 
@@ -353,14 +345,14 @@ export default function OrderPage() {
         <ConfirmDialog
           title="Đổi sang trả tại quầy?"
           confirmLabel="Đổi sang trả tại quầy"
-          cancelLabel={`Giữ ${wallet}`}
+          cancelLabel="Giữ ZaloPay"
           busy={busy}
           onConfirm={handleChangeToCash}
           onCancel={() => setDialog(null)}
         >
           <p>
             Đơn #{order.id} sẽ được gửi ngay tới cửa hàng. Bạn trả {formatPrice(order.total_amount)} tiền
-            mặt khi nhận món. Sau khi đổi sẽ không chuyển lại sang trả online được.
+            mặt khi nhận món. Sau khi đổi sẽ không chuyển lại sang ZaloPay được.
           </p>
         </ConfirmDialog>
       )}

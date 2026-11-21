@@ -295,7 +295,7 @@ export default function App() {
         <div className="site-footer-bottom">
           <span>© 2026 GoLane Vietnam. Tất cả các quyền được bảo lưu.</span>
           <div className="footer-badges">
-            <span>Thanh toán MoMo · ZaloPay</span>
+            <span>Thanh toán ZaloPay</span>
             <span>Tiền mặt tại quầy</span>
             <span>Nhận món tại làn xe</span>
           </div>

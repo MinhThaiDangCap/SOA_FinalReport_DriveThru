@@ -28,7 +28,7 @@ export default function CheckoutPage() {
   const [plate, setPlate] = useState('')
   const [plateTouched, setPlateTouched] = useState(false)
   const [coupon, setCoupon] = useState('')
-  const [method, setMethod] = useState('MOMO')
+  const [method, setMethod] = useState('ZALOPAY')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [placed, setPlaced] = useState(false)
@@ -69,7 +69,7 @@ export default function CheckoutPage() {
     }
 
     try {
-      const next = await payForOrder(order.id, method)
+      const next = await payForOrder(order.id)
       if (next) navigate(next, { replace: true })
     } catch (err) {
       // Đơn đã có nhưng chưa tạo được link thanh toán: khách thanh toán lại ở trang đơn
@@ -159,19 +159,6 @@ export default function CheckoutPage() {
 
         <fieldset className="option-group">
           <legend>Hình thức thanh toán</legend>
-          <label className={`option ${method === 'MOMO' ? 'option-on' : ''}`}>
-            <input
-              type="radio"
-              name="method"
-              value="MOMO"
-              checked={method === 'MOMO'}
-              onChange={() => setMethod('MOMO')}
-            />
-            <span>
-              <strong>Thanh toán online (MoMo)</strong>
-              <small>Thanh toán ngay để đơn được xác nhận</small>
-            </span>
-          </label>
           <label className={`option ${method === 'ZALOPAY' ? 'option-on' : ''}`}>
             <input
               type="radio"
@@ -182,7 +169,10 @@ export default function CheckoutPage() {
             />
             <span>
               <strong>Thanh toán online (ZaloPay)</strong>
-              <small>Quét QR bằng app ZaloPay hoặc trả bằng thẻ ATM / thẻ quốc tế</small>
+              <small>
+                Quét QR bằng app ZaloPay hoặc trả bằng thẻ ATM / thẻ quốc tế. Đã thanh toán thì
+                không hủy trên ứng dụng, cần hủy vui lòng gọi hotline 1900 6868
+              </small>
             </span>
           </label>
           <label className={`option ${method === 'CASH' ? 'option-on' : ''}`}>

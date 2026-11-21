@@ -31,12 +31,10 @@ def get_order(order_id: int) -> tuple[int, dict]:
     return resp.status_code, resp.json()
 
 
-def mark_paid(
-    order_id: int, transaction_ref: str | None, method: str = "MOMO"
-) -> tuple[int, dict]:
+def mark_paid(order_id: int, transaction_ref: str | None) -> tuple[int, dict]:
     resp = _request(
         "POST",
         f"/internal/orders/{order_id}/payment-confirmed",
-        json={"transaction_ref": transaction_ref, "method": method},
+        json={"transaction_ref": transaction_ref},
     )
     return resp.status_code, resp.json()

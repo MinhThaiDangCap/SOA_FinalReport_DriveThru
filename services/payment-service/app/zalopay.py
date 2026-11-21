@@ -1,7 +1,10 @@
-"""Gọi API ZaloPay v2 (tạo đơn, tra cứu, hoàn tiền) và kiểm tra dữ liệu ZaloPay gửi về.
+"""Gọi API ZaloPay v2 (tạo đơn, tra cứu) và kiểm tra dữ liệu ZaloPay gửi về.
 
 Tài liệu: https://docs.zalopay.vn (Gateway / Payment). Mọi yêu cầu gửi đi ký HMAC-SHA256
 bằng key1; callback và redirect ZaloPay gửi về được ký bằng key2.
+
+Hoàn tiền không nằm trong phạm vi hệ thống: đơn đã thanh toán muốn hủy thì khách liên hệ
+hotline, cửa hàng hủy và hoàn tiền trên trang quản lý của ZaloPay.
 """
 import hashlib
 import hmac
@@ -95,31 +98,6 @@ def query_order(app_trans_id: str) -> dict:
         ),
     }
     return _post("/v2/query", data)
-
-
-def refund(refund_suffix: str, zp_trans_id: str, amount: int, description: str) -> str:
-    """Hoàn tiền một giao dịch đã thành công. Trả về m_refund_id của lệnh hoàn.
-
-    ZaloPay xử lý hoàn tiền bất đồng bộ: return_code 3 (đang xử lý) cũng coi là đã nhận lệnh.
-    """
-    timestamp = int(time.time() * 1000)
-    m_refund_id = f"{datetime.now(VN_TZ):%y%m%d}_{config.ZALOPAY_APP_ID}_{refund_suffix}"[:45]
-    data = {
-        "app_id": config.ZALOPAY_APP_ID,
-        "m_refund_id": m_refund_id,
-        "zp_trans_id": zp_trans_id,
-        "amount": amount,
-        "timestamp": timestamp,
-        "description": description,
-        "mac": _hmac(
-            config.ZALOPAY_KEY1,
-            f"{config.ZALOPAY_APP_ID}|{zp_trans_id}|{amount}|{description}|{timestamp}",
-        ),
-    }
-    body = _post("/v2/refund", data, timeout=30.0)
-    if body.get("return_code") not in (SUCCESS, PROCESSING):
-        raise ZaloPayError(f"ZaloPay từ chối hoàn tiền: {_describe(body)}")
-    return m_refund_id
 
 
 def verify_callback(data: str, mac: str) -> bool:

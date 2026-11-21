@@ -5,20 +5,18 @@ from prometheus_client import Counter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import momo, order_client, zalopay
+from app import order_client, zalopay
 from app.models import Payment, PaymentCallback
 
 PAYMENTS = Counter(
     "payments_total", "Số giao dịch thanh toán", ["method", "result"]
 )
 
-METHOD_LABEL = {"MOMO": "MoMo", "ZALOPAY": "ZaloPay"}
-
 
 def _log_callback(
     db: Session, payment: Payment | None, txn_ref: str, raw: dict, valid: bool, code
 ) -> None:
-    """Luôn lưu lại dữ liệu cổng thanh toán gửi về (kể cả sai chữ ký) để đối soát."""
+    """Luôn lưu lại dữ liệu ZaloPay gửi về (kể cả sai chữ ký) để đối soát."""
     db.add(
         PaymentCallback(
             payment_id=payment.id if payment else None,
@@ -31,7 +29,7 @@ def _log_callback(
     db.commit()
 
 
-def _settle(
+def settle(
     db: Session,
     payment: Payment,
     success: bool,
@@ -39,9 +37,9 @@ def _settle(
     bank_code: str | None,
     fail_note: str,
 ) -> str:
-    """Chốt kết quả cuối cùng (thành công/thất bại) của một giao dịch đang PENDING.
+    """Chốt kết quả cuối cùng (thành công/thất bại) của một giao dịch.
 
-    Dùng chung cho MoMo và ZaloPay. Khóa dòng để hai callback đến cùng lúc không xử lý trùng.
+    Khóa dòng để hai lần báo kết quả đến cùng lúc không xử lý trùng.
     Trả về: ok | already_processed | retry
     """
     payment = db.scalar(
@@ -57,13 +55,15 @@ def _settle(
 
     if success:
         try:
-            code, _ = order_client.mark_paid(payment.order_id, transaction_ref, payment.method)
+            code, _ = order_client.mark_paid(payment.order_id, transaction_ref)
         except order_client.OrderServiceUnavailable:
             db.rollback()
             return "retry"
 
         if code == 409:
-            payment.note = "Đơn đã bị hủy trước khi thanh toán, cần hoàn tiền"
+            payment.note = (
+                "Đơn đã bị hủy trước khi tiền về: cửa hàng hoàn tiền cho khách qua hotline"
+            )
         elif code != 200:
             db.rollback()
             return "retry"
@@ -80,48 +80,6 @@ def _settle(
 
     db.commit()
     return "ok"
-
-
-def process_momo_result(
-    db: Session, params: dict, skip_signature: bool = False
-) -> str:
-    """Xử lý kết quả MoMo gửi về (IPN hoặc redirect). Gọi lại nhiều lần vẫn an toàn.
-
-    Trả về: ok | pending | already_processed | invalid_signature | not_found
-            | invalid_amount | retry (lỗi tạm thời, MoMo nên gửi lại)
-    """
-    txn_ref = str(params.get("orderId", ""))
-    valid = True if skip_signature else momo.verify(params)
-    payment = db.scalar(select(Payment).where(Payment.txn_ref == txn_ref))
-    _log_callback(db, payment, txn_ref, params, valid, params.get("resultCode"))
-
-    # 1. Chữ ký
-    if not valid:
-        return "invalid_signature"
-    # 2. Giao dịch tồn tại
-    if payment is None:
-        return "not_found"
-    # 3. Số tiền khớp
-    try:
-        paid_amount = int(params.get("amount", ""))
-        result_code = int(params.get("resultCode", ""))
-    except (TypeError, ValueError):
-        return "invalid_amount"
-    if paid_amount != payment.amount:
-        return "invalid_amount"
-    # 4. MoMo còn đang xử lý: chưa kết luận, chờ lần gọi sau
-    if result_code in momo.PENDING_CODES:
-        return "pending"
-
-    # 5. Chốt kết quả
-    return _settle(
-        db,
-        payment,
-        success=result_code == momo.SUCCESS_CODE,
-        transaction_ref=str(params.get("transId") or "") or None,
-        bank_code=str(params.get("payType") or ""),
-        fail_note=f"MoMo mã lỗi {result_code}: {params.get('message') or ''}",
-    )
 
 
 def process_zalopay_callback(db: Session, data: str, mac: str) -> str:
@@ -141,10 +99,13 @@ def process_zalopay_callback(db: Session, data: str, mac: str) -> str:
     payment = db.scalar(select(Payment).where(Payment.txn_ref == txn_ref)) if txn_ref else None
     _log_callback(db, payment, txn_ref, {"data": data, "mac": mac}, valid, "1")
 
+    # 1. Chữ ký
     if not valid:
         return "invalid_signature"
+    # 2. Giao dịch tồn tại
     if payment is None:
         return "not_found"
+    # 3. Số tiền khớp
     try:
         paid_amount = int(info.get("amount", ""))
     except (TypeError, ValueError):
@@ -152,7 +113,8 @@ def process_zalopay_callback(db: Session, data: str, mac: str) -> str:
     if paid_amount != payment.amount:
         return "invalid_amount"
 
-    return _settle(
+    # 4. Chốt kết quả
+    return settle(
         db,
         payment,
         success=True,
@@ -178,6 +140,7 @@ def sync_zalopay(db: Session, payment: Payment) -> str:
     code = body.get("return_code")
     _log_callback(db, payment, payment.txn_ref, {"query": body}, True, code)
 
+    # Khách chưa trả xong (còn trên trang ZaloPay) hoặc ZaloPay đang xử lý
     if code == zalopay.PROCESSING:
         return "pending"
     if code == zalopay.SUCCESS:
@@ -186,7 +149,7 @@ def sync_zalopay(db: Session, payment: Payment) -> str:
                 return "invalid_amount"
         except (TypeError, ValueError):
             return "invalid_amount"
-        return _settle(
+        return settle(
             db,
             payment,
             success=True,
@@ -194,8 +157,8 @@ def sync_zalopay(db: Session, payment: Payment) -> str:
             bank_code="",
             fail_note="",
         )
-    # Đơn ZaloPay chưa thanh toán (khách hủy, hết hạn...): sub_return_code âm
-    return _settle(
+    # Đơn ZaloPay không được thanh toán (khách hủy, hết hạn, không tồn tại...)
+    return settle(
         db,
         payment,
         success=False,

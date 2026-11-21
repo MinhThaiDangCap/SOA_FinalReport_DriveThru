@@ -32,7 +32,7 @@ const HIGHLIGHTS = [
   {
     icon: 'card',
     title: 'Thanh toán linh hoạt',
-    text: 'Hỗ trợ thanh toán trực tuyến qua ví MoMo, ZaloPay hoặc trả tiền mặt tại quầy.',
+    text: 'Hỗ trợ thanh toán trực tuyến qua ZaloPay hoặc trả tiền mặt tại quầy.',
   },
 ]
 

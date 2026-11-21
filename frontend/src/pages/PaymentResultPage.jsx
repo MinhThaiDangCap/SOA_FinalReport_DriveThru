@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
-import { getMomoResult, getZaloPayResult } from '../api/payments.js'
+import { getZaloPayResult } from '../api/payments.js'
 import Icon from '../components/Icon.jsx'
-import { METHOD_LABEL, formatPrice } from '../format.js'
+import { formatPrice } from '../format.js'
 
 export default function PaymentResultPage() {
   const { search } = useLocation()
@@ -17,14 +17,9 @@ export default function PaymentResultPage() {
     let timer
     let tries = 0
 
-    // ZaloPay trả về ?appid=...&apptransid=...; MoMo trả về ?partnerCode=...&orderId=...
-    const fetchResult = new URLSearchParams(search).has('apptransid')
-      ? getZaloPayResult
-      : getMomoResult
-
     const check = async () => {
       try {
-        const data = await fetchResult(search)
+        const data = await getZaloPayResult(search)
         if (cancelled) return
         setResult(data)
         if (data.payment_status === 'PENDING' && tries < 5) {
@@ -68,7 +63,6 @@ export default function PaymentResultPage() {
   }
 
   const tone = result.success ? 'ok' : result.payment_status === 'PENDING' ? 'wait' : 'fail'
-  const wallet = METHOD_LABEL[result.method] || 'MoMo'
 
   return (
     <div className="auth-card pay-result">
@@ -81,7 +75,7 @@ export default function PaymentResultPage() {
       </p>
       {tone === 'wait' && (
         <p className="auth-sub">
-          {wallet} chưa gửi xác nhận về hệ thống. Đơn sẽ tự chuyển sang "Đã xác nhận" khi {wallet}{' '}
+          ZaloPay chưa gửi xác nhận về hệ thống. Đơn sẽ tự chuyển sang "Đã xác nhận" khi ZaloPay
           báo về; bạn không cần thanh toán lại.
         </p>
       )}
