@@ -31,9 +31,9 @@ Khách chọn cửa hàng, đặt món và thanh toán online (MoMo) hoặc tr�
  auth-service   menu-service      order-service    payment-service   feedback-service
    :8001           :8002              :8003            :8004              :8005
      │               │                  │                │                  │
-     └───────────────┴──────── PostgreSQL :5432 (5 database riêng) ─────────┘
+     └───────────────┴──────── PostgreSQL :5432 (5 database, 5 tài khoản riêng) ──┘
 
-  order-service ──▶ menu-service      (lấy giá món, kiểm tra còn hàng)
+  order-service ──▶ menu-service      (lấy giá món, kiểm tra còn hàng, số phút làm món)
   payment-service ─▶ order-service    (xác nhận đã thanh toán)
   order-service ──▶ payment-service   (hoàn tiền khi khách hủy đơn đã trả)
   feedback-service ─▶ order-service   (kiểm tra đơn đã hoàn thành)
@@ -53,7 +53,7 @@ Khách chọn cửa hàng, đặt món và thanh toán online (MoMo) hoặc tr�
 | `prometheus` / `grafana` | 9090 / 3000 | — | Thu thập metrics và dashboard giám sát |
 
 **Nguyên tắc chính:**
-- Mỗi service có database riêng, không đọc database của service khác. Cần dữ liệu thì gọi API.
+- Mỗi service có database riêng **và tài khoản PostgreSQL riêng** (`auth_user`, `menu_user`, `order_user`, `payment_user`, `feedback_user`). Tài khoản của service này bị PostgreSQL từ chối khi vào database của service khác, nên muốn lấy dữ liệu bắt buộc phải gọi API. Kiểm tra bằng `bash scripts/check-db-isolation.sh`.
 - Gọi nội bộ giữa các service đi qua `/internal/...`, kèm header `X-Internal-Key`. Gateway chặn mọi đường `/internal/` từ bên ngoài.
 - JWT do `auth-service` phát, các service khác tự kiểm tra bằng cùng `JWT_SECRET`.
 - Giá tiền luôn tính ở server, không tin giá client gửi lên.
@@ -65,6 +65,12 @@ PENDING_PAYMENT ──▶ CONFIRMED ──▶ PREPARING ──▶ READY ──�
        └──▶ CANCELLED ◀─┘                ARRIVED ─┘◀─┘   (khách báo "Tôi đã đến")
 ```
 Đơn trả tại quầy bắt đầu luôn ở `CONFIRMED`. Đơn MoMo chuyển sang `CONFIRMED` khi thanh toán thành công.
+
+**Ước lượng giờ xong đơn:**
+- Mỗi món có số phút làm cố định (`prep_minutes`, admin sửa trong trang Thực đơn). Mỗi cửa hàng có số đơn bếp làm được cùng lúc (`kitchen_capacity`, sửa trong trang Cửa hàng).
+- Thời gian làm 1 đơn = món lâu nhất + 1 phút cho mỗi 2 phần thêm.
+- Giờ xong dự kiến = bây giờ + (phút còn lại của các đơn xếp trước ÷ số đơn làm cùng lúc) + thời gian làm đơn đó. Tính khi đơn vào hàng đợi và tính lại khi bếp bấm "Bắt đầu làm".
+- Khách thấy "Dự kiến xong lúc …" ở trang đơn; màn hình quầy tô đỏ đơn trễ hẹn. Code: `services/order-service/app/estimate.py`.
 
 ---
 
@@ -106,8 +112,8 @@ git --version
 ```bash
 git clone https://github.com/MinhThaiDangCap/SOA_FinalReport_DriveThru.git
 cd SOA_FinalReport_DriveThru
-git checkout feature/integration
 ```
+Bản nộp nằm ở nhánh `main`. Nhánh đang phát triển là `feature/integration`.
 
 ### 3.3. Cấu hình (không bắt buộc)
 
@@ -121,6 +127,9 @@ Chỉ tạo file `.env` ở thư mục gốc khi muốn đổi giá trị. File 
 | `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` | Có tài khoản MoMo Business riêng. Để trống = key test công khai |
 | `NGROK_AUTHTOKEN`, `MOMO_IPN_URL`, `MOMO_REDIRECT_URL` | Cho MoMo gọi IPN thật qua internet (xem [mục 5](#5-thanh-toán-momo)) |
 | `PAYMENT_MOCK_MODE=true` | Thanh toán giả, không gọi MoMo (dự phòng khi demo mất mạng) |
+| `AUTH_DB_PASSWORD`, `MENU_DB_PASSWORD`, `ORDER_DB_PASSWORD`, `PAYMENT_DB_PASSWORD`, `FEEDBACK_DB_PASSWORD` | Đổi mật khẩu tài khoản database của từng service. Chỉ có tác dụng khi database được tạo mới (`docker compose down -v`) |
+
+Mẫu đầy đủ ở `.env.example`. **Lưu ý:** nếu copy từ `.env.example`, giữ `MOMO_REDIRECT_URL=http://localhost:8080/payment/result` khi chạy bằng Docker.
 
 ### 3.4. Build và chạy
 
@@ -137,6 +146,20 @@ Kiểm tra:
 docker compose ps
 ```
 Các container phải ở trạng thái `Up`, riêng `drivethru_postgres` là `Up (healthy)`.
+
+> **Máy đã từng chạy bản cũ** (trước khi tách tài khoản database): chạy **một lần** `docker compose down -v` rồi `docker compose up -d --build`. Lệnh này xóa dữ liệu cũ; tài khoản mẫu, cửa hàng, món và đánh giá mẫu sẽ tự tạo lại. Nếu bỏ qua, các service sẽ báo `password authentication failed for user "..._user"`.
+
+**Kiểm tra cả hệ thống** (chỉ cần Python 3):
+```bash
+python scripts/smoke_test.py
+```
+Script đi hết một vòng: đăng nhập 3 vai trò → đặt đơn → quầy làm món, thu tiền, giao món → đánh giá → tạo giao dịch MoMo → kiểm tra phân quyền và gateway. Cuối cùng in `ĐẠT: 36 bước kiểm tra đều đúng.`
+
+**Kiểm tra mỗi service chỉ vào được database của mình:**
+```bash
+bash scripts/check-db-isolation.sh
+```
+(Trên Windows chạy trong **Git Bash**.) Kết quả là bảng 5 tài khoản × 5 database, chỉ đường chéo "vào được".
 
 ---
 
@@ -176,26 +199,41 @@ Hệ thống dùng **MoMo sandbox** với bộ key test công khai, không cần
    - chuyển khách về `/payment/result` trên web.
 3. payment-service kiểm tra chữ ký HMAC-SHA256 và số tiền, rồi báo order-service chuyển đơn sang `CONFIRMED`. Mỗi giao dịch chỉ được xử lý một lần.
 
-**Thanh toán thành công trên sandbox:** quét QR bằng app **MoMo bản test (UAT)**. App MoMo thường không dùng được. Bấm hủy trên trang MoMo để thử trường hợp thất bại.
+**Thanh toán thành công trên sandbox:** trên trang MoMo chọn **thẻ ATM nội địa** và nhập thẻ test `9704 0000 0000 0018`, tên `NGUYEN VAN A`, ngày phát hành `03/07`, OTP `OTP` (theo tài liệu sandbox của MoMo, có thể thay đổi). Hoặc quét QR bằng app **MoMo bản test (UAT)**; app MoMo thường không dùng được. Bấm hủy trên trang MoMo để thử trường hợp thất bại.
 
 **Chạy trên máy cá nhân (mặc định):** MoMo không gọi IPN vào `localhost` được, nên `MOMO_PROCESS_ON_RETURN=true` cho phép trang kết quả tự xác nhận giao dịch. Bước này vẫn kiểm tra chữ ký nên khách không sửa URL để gian lận được.
 
-**Cho MoMo gọi IPN thật (khi demo):**
-1. Tạo tài khoản miễn phí tại https://ngrok.com, lấy **authtoken** ở trang Dashboard.
-2. Thêm `NGROK_AUTHTOKEN=<token>` vào `.env`.
-3. Bật tunnel:
-   ```bash
-   docker compose --profile tunnel up -d
-   ```
-4. Mở http://localhost:4040 để lấy link public dạng `https://xxxx.ngrok-free.app`.
-5. Thêm vào `.env`:
-   ```
-   MOMO_IPN_URL=https://xxxx.ngrok-free.app/api/payments/momo/ipn
-   MOMO_REDIRECT_URL=https://xxxx.ngrok-free.app/payment/result
-   ```
-6. Áp dụng: `docker compose up -d payment-service`
+**Cho MoMo gọi IPN thật qua ngrok (khi demo):**
 
-Gói ngrok miễn phí đổi link mỗi lần khởi động lại, khi đó làm lại bước 4–6.
+Không cần tài khoản MoMo Business: key test công khai vẫn nhận IPN, vì địa chỉ IPN được gửi kèm mỗi giao dịch. ngrok chỉ mở một địa chỉ công khai trỏ vào máy bạn.
+
+1. Tạo tài khoản miễn phí tại https://ngrok.com. Trong dashboard lấy **authtoken** (mục *Your Authtoken*) và **domain miễn phí** dạng `xxxx.ngrok-free.app` (mục *Domains*, chưa có thì tạo).
+   - Mỗi người dùng token và domain của chính mình. Một domain không chạy cùng lúc ở hai máy (lỗi `ERR_NGROK_334`).
+   - **Không** ghi token vào file nào được push lên GitHub (kể cả `.env.example`). Lỡ push thì vào dashboard ngrok xóa token đó và tạo token mới.
+2. Thêm vào `.env` (domain viết không có `https://` và không có `/` ở cuối):
+   ```
+   NGROK_AUTHTOKEN=<token của bạn>
+   NGROK_DOMAIN=<domain của bạn>
+   MOMO_IPN_URL=https://<domain của bạn>/api/payments/momo/ipn
+   MOMO_REDIRECT_URL=https://<domain của bạn>/payment/result
+   MOMO_PROCESS_ON_RETURN=false
+   ```
+   `MOMO_PROCESS_ON_RETURN=false` để đơn chỉ được xác nhận nhờ IPN, chứng minh IPN chạy thật.
+3. Bật tunnel và áp dụng cấu hình mới cho payment-service:
+   ```bash
+   docker compose --profile tunnel up -d ngrok
+   docker compose up -d payment-service
+   ```
+4. Kiểm tra:
+   - `docker logs drivethru_ngrok --tail 20` phải báo tunnel online với đúng domain. Nếu báo `unknown flag: --url`, đổi `--url=` thành `--domain=` trong `command` của service `ngrok` ở `docker-compose.yml`.
+   - `docker compose exec payment-service printenv MOMO_IPN_URL MOMO_REDIRECT_URL` phải in 2 link bắt đầu bằng `https://<domain của bạn>`.
+   - Mở `https://<domain của bạn>/` (gặp trang cảnh báo của ngrok thì bấm **Visit Site**), hoặc chạy `python scripts/smoke_test.py --base-url https://<domain của bạn>`.
+5. Đặt một đơn MoMo **ngay trên link ngrok** (đăng nhập trên link đó; phiên đăng nhập ở `localhost:8080` không dùng chung). Thanh toán xong, mở http://localhost:4040 và lọc chữ `ipn`: thấy `POST /api/payments/momo/ipn` mã `204` là MoMo đã gọi IPN thật (có thể chậm vài giây).
+
+**Sau khi demo:**
+- Tắt tunnel: `docker compose --profile tunnel stop ngrok`. Khi tunnel bật, ai có link cũng vào được hệ thống (gateway vẫn chặn `/internal/` và `/metrics`).
+- Đặt lại `MOMO_REDIRECT_URL=http://localhost:8080/payment/result`, `MOMO_PROCESS_ON_RETURN=true` (hoặc xóa các dòng MoMo/ngrok trong `.env`), rồi `docker compose up -d payment-service`.
+- Mở `/api/payments/momo/ipn` bằng trình duyệt ra `405 Method Not Allowed` là bình thường, vì route này chỉ nhận POST.
 
 ---
 
@@ -210,15 +248,20 @@ Gói ngrok miễn phí đổi link mỗi lần khởi động lại, khi đó l�
 | Build lại một service sau khi sửa code | `docker compose up -d --build payment-service` |
 | Tắt hết (giữ dữ liệu) | `docker compose down` |
 | Tắt và **xóa sạch database** | `docker compose down -v` |
-| Vào database | `docker exec -it drivethru_postgres psql -U admin -d order_db` |
+| Vào database (tài khoản quản trị) | `docker exec -it drivethru_postgres psql -U admin -d order_db` |
+| Kiểm tra cả hệ thống | `python scripts/smoke_test.py` |
+| Kiểm tra phân quyền database | `bash scripts/check-db-isolation.sh` |
+| Demo: service không vào được database khác | `docker exec -it drivethru_postgres psql -U order_user -d payment_db` → `permission denied` |
 
-Xem database bằng TablePlus/DBeaver: host `localhost`, port `5432`, user `admin`, mật khẩu `secretpassword` (giá trị mặc định trong `docker-compose.yml`).
+Xem database bằng TablePlus/DBeaver: host `localhost`, port `5432`, user `admin`, mật khẩu `secretpassword` (giá trị mặc định trong `docker-compose.yml`). Tài khoản `admin` chỉ để quản trị; các service dùng tài khoản riêng (mặc định `auth_user` / `auth_secret`, `menu_user` / `menu_secret`, …).
 
 ---
 
 ## 7. Chạy test
 
-Mỗi service có test riêng, chạy bằng SQLite trong bộ nhớ nên **không cần Postgres hay Docker**. Cần Python 3.12+.
+Có 2 lớp kiểm thử:
+- **Test API của từng service** (pytest, 77 test): chạy bằng SQLite trong bộ nhớ nên **không cần Postgres hay Docker**. Cần Python 3.12+.
+- **Kiểm tra hệ thống thật** (`scripts/smoke_test.py`, 36 bước) và **phân quyền database** (`scripts/check-db-isolation.sh`): chạy với Docker đang bật, xem [mục 3.4](#34-build-và-chạy).
 
 ```bash
 cd services/payment-service
@@ -226,13 +269,13 @@ pip install -r requirements.txt pytest
 python -m pytest -q tests
 ```
 
-| Service | Lệnh (đứng trong thư mục service) |
-|---|---|
-| `auth-service` | `python -m pytest -q test_auth.py` |
-| `services/menu-service` | `python -m pytest -q tests` |
-| `services/order-service` | `python -m pytest -q tests` |
-| `services/payment-service` | `python -m pytest -q tests` |
-| `feeback-service` | `python -m pytest -q test_reviews.py` |
+| Service | Lệnh (đứng trong thư mục service) | Số test |
+|---|---|---|
+| `auth-service` | `python -m pytest -q test_auth.py` | 12 |
+| `services/menu-service` | `python -m pytest -q tests` | 20 |
+| `services/order-service` | `python -m pytest -q tests` | 20 |
+| `services/payment-service` | `python -m pytest -q tests` | 13 |
+| `feeback-service` | `python -m pytest -q test_reviews.py` | 12 |
 
 Frontend kiểm tra build:
 ```bash
@@ -253,6 +296,8 @@ npm run build
 | Service cứ `Restarting` | Thường do Postgres chưa sẵn sàng. Đợi 10 giây rồi `docker compose restart <tên-service>` |
 | Sửa code nhưng web không đổi | Quên `--build`. Chạy lại `docker compose up -d --build` |
 | Thanh toán MoMo xong bị chuyển tới trang không mở được | Kiểm tra `MOMO_REDIRECT_URL` trong `.env` trỏ đúng `http://localhost:8080/payment/result` (hoặc link ngrok) |
+| `password authentication failed for user "..._user"` | Database tạo từ bản cũ (trước khi tách tài khoản) hoặc vừa đổi `*_DB_PASSWORD`. Chạy `docker compose down -v` rồi `docker compose up -d --build` |
+| `init-dbs.sh: line 1: $'\r': command not found` trong log postgres | File bị đổi xuống dòng kiểu Windows. Xóa file rồi lấy lại từ Git theo `.gitattributes`: `rm init-dbs.sh` rồi `git checkout -- init-dbs.sh`, sau đó `docker compose down -v` và chạy lại |
 | Muốn làm lại từ đầu | `docker compose down -v` rồi `docker compose up -d --build` |
 | Ổ đĩa đầy vì image cũ | `docker system prune` (có hỏi xác nhận trước khi xóa) |
 
@@ -270,7 +315,9 @@ SOA_FinalReport_DriveThru/
 │   └── payment-service/     # MoMo, tiền mặt, hoàn tiền
 ├── frontend/                # React + Vite, build ra nginx làm gateway
 ├── monitoring/              # Cấu hình Prometheus và dashboard Grafana
-├── init-dbs.sql             # Tạo 5 database khi Postgres khởi động lần đầu
+├── scripts/                 # smoke_test.py (kiểm tra hệ thống), check-db-isolation.sh
+├── docs/                    # Use Case, ERD, sơ đồ kiến trúc, máy trạng thái đơn
+├── init-dbs.sh              # Tạo 5 database + 5 tài khoản riêng khi Postgres khởi động lần đầu
 ├── docker-compose.yml       # Chạy toàn bộ hệ thống
 ├── .env.example             # Mẫu biến môi trường
 └── HUONG_DAN_PHAN_CUA_TAN.md  # Chi tiết phần auth, feedback, giám sát

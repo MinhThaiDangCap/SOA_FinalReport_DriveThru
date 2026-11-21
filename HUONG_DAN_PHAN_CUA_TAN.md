@@ -69,70 +69,11 @@ Sau khi chạy xong, mở trình duyệt tại:
 3. **Khi khách chấm 1–2 sao thì điều gì xảy ra?**
    - Pydantic Schema (`@model_validator`) chặn ngay nếu khách không nhập lý do (`HTTP 422`), đồng thời bộ đếm metric `negative_reviews_total` trên Prometheus/Grafana tăng lên theo từng cửa hàng để Admin kịp thời chấn chỉnh chất lượng phục vụ.
 
-   ## 6. Lưu ý khi chạy local
-
-- `MOMO_PROCESS_ON_RETURN=true` (mặc định): MoMo không gọi IPN vào `localhost` được, nên trang kết quả tự xác nhận giao dịch (vẫn kiểm tra chữ ký).
-- `MOMO_REDIRECT_URL` mặc định trong Docker là `http://localhost:8080/payment/result`.
-- Muốn MoMo gọi IPN thật: dùng ngrok, xem mục 7 bên dưới.
-- Mất mạng khi demo: đặt `PAYMENT_MOCK_MODE=true` để dùng thanh toán giả.
-- Xem log khi lỗi: `docker compose logs -f payment-service`
-
 ---
 
-## 7. Chạy với ngrok (cho MoMo gọi IPN thật)
+## 6. Chạy local, MoMo và ngrok
 
-Chỉ cần khi demo hoặc khi muốn kiểm tra IPN. Chạy bình thường ở local thì bỏ qua mục này.
-
-### 7.1 Chuẩn bị (mỗi người làm cho máy của mình)
-1. Tạo tài khoản miễn phí tại https://ngrok.com.
-2. Vào dashboard → **Your Authtoken** để lấy authtoken.
-3. Vào mục **Domains** để lấy domain miễn phí dạng `xxxx.ngrok-free.app` (hoặc `.ngrok-free.dev`). Nếu chưa có thì tạo mới.
-
-> Mỗi người dùng **token và domain của chính mình**. Một domain không chạy online ở hai máy cùng lúc (lỗi `ERR_NGROK_334`).
-> Không đưa token vào bất kỳ file nào được push lên GitHub.
-
-### 7.2 Cấu hình `.env`
-Chỉ ghi domain, không có `https://` và không có dấu `/` ở cuối:
-
-```
-NGROK_AUTHTOKEN=<token của bạn>
-NGROK_DOMAIN=<domain của bạn>
-MOMO_IPN_URL=https://<domain của bạn>/api/payments/momo/ipn
-MOMO_REDIRECT_URL=https://<domain của bạn>/payment/result
-```
-
-Dòng `MOMO_REDIRECT_URL` cũ (`http://localhost:8080/payment/result`) nên đặt dấu `#` ở đầu để quay lại sau demo.
-
-### 7.3 Chạy
-```bash
-docker compose --profile tunnel up -d ngrok
-docker compose up -d payment-service
-```
-
-Kiểm tra:
-```bash
-docker logs drivethru_ngrok --tail 20
-docker compose exec payment-service printenv MOMO_IPN_URL MOMO_REDIRECT_URL
-```
-- Log ngrok phải báo tunnel online với đúng domain của bạn.
-- Nếu log báo `unknown flag: --url`, đổi `--url=` thành `--domain=` ở lệnh `command` của service `ngrok` trong `docker-compose.yml`.
-- `printenv` phải in ra hai URL bắt đầu bằng `https://<domain của bạn>`.
-
-### 7.4 Kiểm tra
-1. Mở `https://<domain của bạn>/` trên trình duyệt. Nếu hiện trang cảnh báo của ngrok thì bấm **Visit Site**. Web phải hiện ra.
-2. Mở http://localhost:4040 để xem request đi qua tunnel.
-3. Tự gửi một IPN giả. Trên Windows PowerShell gõ `curl.exe` (có đuôi `.exe`):
-   ```powershell
-   curl.exe -i -X POST https://<domain của bạn>/api/payments/momo/ipn -H "Content-Type: application/json" -d "{}"
-   ```
-   Dòng đầu của kết quả là `HTTP/1.1 204 No Content`. Body này không có chữ ký hợp lệ nên hệ thống bỏ qua, không đổi trạng thái đơn nào.
-4. Đặt một đơn MoMo qua **chính link ngrok** (đăng nhập ngay trên link đó, vì đăng nhập ở `localhost:8080` không dùng chung được). Sau khi thanh toán, ở trang 4040 lọc chữ `ipn`, nếu thấy `POST /api/payments/momo/ipn` mã `204` là MoMo đã gọi IPN thật. IPN có thể đến chậm vài giây, và sandbox đôi khi không gửi.
-
-### 7.5 Lưu ý
-- Mở link `/api/payments/momo/ipn` bằng trình duyệt sẽ ra `405 Method Not Allowed`. Bình thường, vì route này chỉ nhận POST.
-- Khi tunnel đang bật, ai có link cũng vào được hệ thống của bạn. Gateway đã chặn `/internal/` và `/metrics`, nhưng vẫn nên tắt sau khi dùng:
-  ```bash
-  docker compose --profile tunnel stop ngrok
-  ```
-- Tắt tunnel xong thì đặt lại `MOMO_REDIRECT_URL=http://localhost:8080/payment/result`, rồi chạy `docker compose up -d payment-service`. Nếu để nguyên link ngrok thì thanh toán ở local sẽ bị chuyển về trang không mở được.
-- Nếu không muốn dựng tunnel riêng, hãy xin nhóm trưởng gửi link ngrok qua chat riêng. Khi máy nhóm trưởng đang chạy Docker và tunnel, link đó dùng được mà không cần token.
+Hướng dẫn chung cho cả nhóm đã chuyển sang README:
+- Cấu hình `.env` và các lưu ý khi chạy local: [README mục 3.3](README.md#33-cấu-hình-không-bắt-buộc)
+- Thanh toán MoMo, chạy ngrok với domain cố định, kiểm tra IPN thật: [README mục 5](README.md#5-thanh-toán-momo)
+- Kiểm tra cả hệ thống và phân quyền database: [README mục 3.4](README.md#34-build-và-chạy)
