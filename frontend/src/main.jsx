@@ -8,7 +8,7 @@ import { CartProvider } from './context/CartContext.jsx'
 import './styles.css'
 
 // Trình duyệt có thể khôi phục nguyên trang cũ từ bộ nhớ đệm khi bấm "Quay lại"
-// (vd. từ trang MoMo về), lúc đó giao diện là trạng thái cũ, không khớp địa chỉ hiện tại.
+// (vd. từ trang ZaloPay về), lúc đó giao diện là trạng thái cũ, không khớp địa chỉ hiện tại.
 // Tải lại để luôn hiện đúng trang và dữ liệu mới nhất.
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) window.location.reload()

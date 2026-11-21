@@ -5,6 +5,7 @@ import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../ap
 import { formatDateTime, formatDuration, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Icon from './Icon.jsx'
+import LicensePlate, { formatPlate } from './LicensePlate.jsx'
 import NotificationBell from './NotificationBell.jsx'
 
 const POLL_MS = 5000
@@ -88,7 +89,7 @@ function CashDialog({ order, busy, onConfirm, onCancel }) {
       <div className="cash-summary">
         <div>
           <span className="muted">Xe</span>
-          <strong className="cash-plate">{order.license_plate}</strong>
+          <LicensePlate value={order.license_plate} size="lg" />
         </div>
         <div>
           <span className="muted">Đơn</span>
@@ -161,7 +162,7 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
         </div>
       )}
       <div className="ticket-head">
-        <span className="ticket-plate">{order.license_plate}</span>
+        <LicensePlate value={order.license_plate} size="md" />
         <span className="ticket-id">#{order.id}</span>
       </div>
       {arrived && (
@@ -249,7 +250,7 @@ export default function OrderBoard({ stationId, stationNames }) {
               type: 'new',
               orderId: o.id,
               stationId: o.station_id,
-              title: `Đơn mới #${o.id} · ${o.license_plate}`,
+              title: `Đơn mới #${o.id} · ${formatPlate(o.license_plate)}`,
               detail: [nameOf(o.station_id), METHOD_LABEL[o.payment_method]].filter(Boolean).join(' · '),
               at: now,
               read: false,
@@ -268,7 +269,7 @@ export default function OrderBoard({ stationId, stationNames }) {
             type: 'arrived',
             orderId: o.id,
             stationId: o.station_id,
-            title: `Xe ${o.license_plate} đã tới quầy`,
+            title: `Xe ${formatPlate(o.license_plate)} đã tới quầy`,
             detail: [`Đơn #${o.id}`, STATUS_LABEL[o.status], nameOf(o.station_id)].filter(Boolean).join(' · '),
             at: o.arrived_at ? new Date(o.arrived_at) : now,
             read: false,
@@ -303,7 +304,7 @@ export default function OrderBoard({ stationId, stationNames }) {
     try {
       await action.run()
       if (action.cash) {
-        setDone(`Đã thu ${formatPrice(order.total_amount)} của xe ${order.license_plate} (đơn #${order.id}) và giao món.`)
+        setDone(`Đã thu ${formatPrice(order.total_amount)} của xe ${formatPlate(order.license_plate)} (đơn #${order.id}) và giao món.`)
       }
       setCashFor(null)
       await load()
@@ -473,7 +474,7 @@ export default function OrderBoard({ stationId, stationNames }) {
               {shownRecent.map((o) => (
                 <tr key={o.id}>
                   <td>#{o.id}</td>
-                  <td>{o.license_plate}</td>
+                  <td><LicensePlate value={o.license_plate} size="sm" /></td>
                   {multiStation && (
                     <td>
                       {nameOf(o.station_id)}

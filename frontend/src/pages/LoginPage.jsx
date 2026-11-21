@@ -32,7 +32,7 @@ const HIGHLIGHTS = [
   {
     icon: 'card',
     title: 'Thanh toán linh hoạt',
-    text: 'Hỗ trợ thanh toán trực tuyến qua ví MoMo hoặc trả tiền mặt tại quầy.',
+    text: 'Hỗ trợ thanh toán trực tuyến qua ZaloPay hoặc trả tiền mặt tại quầy.',
   },
 ]
 
@@ -85,7 +85,7 @@ export default function LoginPage() {
             alt="Nhân viên GoLane giao món tận xe tại làn Drive-Thru"
             className="auth-photo"
           />
-          <span className="auth-photo-badge">🚗 Giao món tại làn xe ~60s</span>
+          <span className="auth-photo-badge with-icon"><Icon name="car" size={15} /> Giao món tại làn xe ~60s</span>
         </div>
 
         <ul className="auth-highlights">
@@ -112,7 +112,7 @@ export default function LoginPage() {
             <span>Giao món tại làn xe</span>
           </div>
           <div>
-            <strong>4.9 ★</strong>
+            <strong className="with-icon">4.9 <Icon name="star" filled size={18} className="star-fill" /></strong>
             <span>Đánh giá hài lòng</span>
           </div>
         </div>

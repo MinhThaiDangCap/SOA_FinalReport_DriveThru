@@ -64,46 +64,54 @@ def test_customer_cannot_see_other_customers_order(client):
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
     assert client.get(f"/api/orders/{oid}", headers=auth(11, "CUSTOMER")).status_code == 403
 
-# ---------- Hủy đơn MoMo đã trả: phải hoàn tiền trước ----------
-from fastapi import HTTPException
+# ---------- Hủy đơn ZaloPay: đã trả thì không cho tự hủy, khách gọi hotline ----------
 from app import payment_client
 
+ZP = {**BODY, "payment_method": "ZALOPAY"}
 
-def paid_momo_order(client):
-    body = {**BODY, "payment_method": "MOMO"}
-    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+
+def paid_zalopay_order(client):
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
     r = client.post(f"/internal/orders/{oid}/payment-confirmed",
                     json={"transaction_ref": "123"}, headers={"X-Internal-Key": "ik"})
     assert r.status_code == 200 and r.json()["status"] == "CONFIRMED"
     return oid
 
 
-def test_cancel_paid_momo_order_refunds_first(client, monkeypatch):
-    calls = []
-    monkeypatch.setattr(payment_client, "refund_order",
-                        lambda oid: calls.append(oid) or {"refunded": True, "amount": 90000})
-    oid = paid_momo_order(client)
+def test_cannot_cancel_paid_zalopay_order(client):
+    oid = paid_zalopay_order(client)
     r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
-    assert r.status_code == 200 and r.json()["status"] == "CANCELLED"
-    assert calls == [oid]
-    assert r.json()["history"][-1]["note"] == "Khách hủy đơn, đã hoàn 90.000đ về ví MoMo"
-
-
-def test_cancel_kept_when_refund_fails(client, monkeypatch):
-    def fail(oid):
-        raise HTTPException(status_code=502, detail="MoMo chưa hoàn tiền được")
-    monkeypatch.setattr(payment_client, "refund_order", fail)
-    oid = paid_momo_order(client)
-    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 502
+    assert r.status_code == 409 and "hotline" in r.json()["detail"]
     assert client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()["status"] == "CONFIRMED"
 
 
-def test_cancel_unpaid_or_cash_order_skips_refund(client, monkeypatch):
-    monkeypatch.setattr(payment_client, "refund_order", lambda oid: pytest.fail("không được gọi"))
+def test_cancel_unpaid_zalopay_checks_payment_first(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: calls.append(sync) or False)
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200 and r.json()["status"] == "CANCELLED"
+    assert calls == [True]  # đã hỏi ZaloPay trước khi hủy
+
+
+def test_cancel_blocked_when_customer_just_paid(client, monkeypatch):
+    """Khách vừa quét mã xong, callback chưa tới: tra cứu thấy đã trả thì không cho hủy."""
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
+
+    def just_paid(order_id, sync=False):
+        # payment-service tra cứu ZaloPay thấy đã trả -> gọi lại order-service xác nhận đơn
+        client.post(f"/internal/orders/{order_id}/payment-confirmed",
+                    json={"transaction_ref": "9"}, headers={"X-Internal-Key": "ik"})
+        return True
+
+    monkeypatch.setattr(payment_client, "is_paid", just_paid)
+    r = client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 409 and "hotline" in r.json()["detail"]
+
+
+def test_cancel_cash_order_does_not_ask_payment(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: pytest.fail("không được gọi"))
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
-    assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200
-    body = {**BODY, "payment_method": "MOMO"}
-    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
     assert client.post(f"/api/orders/{oid}/cancel", headers=auth(10, "CUSTOMER")).status_code == 200
 
 
@@ -118,7 +126,7 @@ def ready_cash_order(client):
 
 def test_cash_order_needs_payment_before_completed(client, monkeypatch):
     paid = {"v": False}
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: paid["v"])
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: paid["v"])
     oid = ready_cash_order(client)
     r = client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
     assert r.status_code == 409 and "thu tiền" in r.json()["detail"]
@@ -128,7 +136,7 @@ def test_cash_order_needs_payment_before_completed(client, monkeypatch):
 
 
 def test_admin_stats_and_recent(client, monkeypatch):
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: True)
     oid = ready_cash_order(client)
     client.patch(f"/api/orders/{oid}/status", json={"status": "COMPLETED"}, headers=auth(20, "STAFF", 1))
     client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER"))  # 1 đơn đang chờ
@@ -160,10 +168,9 @@ def change_method(client, oid, method, uid=10):
                         headers=auth(uid, "CUSTOMER"))
 
 
-def test_switch_unpaid_momo_to_cash(client, monkeypatch):
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
-    body = {**BODY, "payment_method": "MOMO"}
-    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+def test_switch_unpaid_zalopay_to_cash(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: False)
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
 
     assert change_method(client, oid, "CASH", uid=11).status_code == 403  # đơn người khác
     r = change_method(client, oid, "CASH")
@@ -174,11 +181,11 @@ def test_switch_unpaid_momo_to_cash(client, monkeypatch):
     assert change_method(client, oid, "CASH").status_code == 200  # giữ nguyên, không lỗi
 
 
-def test_cash_order_cannot_switch_to_momo(client, monkeypatch):
+def test_cash_order_cannot_switch_to_zalopay(client, monkeypatch):
     """Đơn trả tại quầy đã nằm trong hàng đợi: không rút về chờ thanh toán."""
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: False)
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
-    r = change_method(client, oid, "MOMO")
+    r = change_method(client, oid, "ZALOPAY")
     assert r.status_code == 409 and "hủy đơn" in r.json()["detail"]
 
     order = client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()
@@ -188,27 +195,26 @@ def test_cash_order_cannot_switch_to_momo(client, monkeypatch):
 
 
 def test_cannot_switch_after_paid(client, monkeypatch):
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
-    oid = paid_momo_order(client)  # MoMo đã trả -> CONFIRMED
+    oid = paid_zalopay_order(client)  # ZaloPay đã trả -> CONFIRMED
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: False)
     assert change_method(client, oid, "CASH").status_code == 409
 
-    # MoMo vừa báo đã trả nhưng đơn chưa kịp cập nhật
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
-    body = {**BODY, "payment_method": "MOMO"}
-    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+    # Khách vừa quét mã xong nhưng đơn chưa kịp cập nhật
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: True)
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
     assert change_method(client, oid, "CASH").status_code == 409
 
 
-def test_late_momo_payment_after_switching_to_cash(client, monkeypatch):
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
-    body = {**BODY, "payment_method": "MOMO"}
-    oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
+def test_late_zalopay_payment_after_switching_to_cash(client, monkeypatch):
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: False)
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
     change_method(client, oid, "CASH")
     r = client.post(f"/internal/orders/{oid}/payment-confirmed",
                     json={"transaction_ref": "1"}, headers={"X-Internal-Key": "ik"})
     assert r.status_code == 200
     order = client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()
-    assert (order["payment_method"], order["status"]) == ("MOMO", "CONFIRMED")
+    assert (order["payment_method"], order["status"]) == ("ZALOPAY", "CONFIRMED")
+    assert order["history"][-1]["note"] == "Khách đã thanh toán ZaloPay, không cần thu tiền mặt"
 
 
 # ---------- Khách tới sớm: chỉ ghi giờ đến, không nhảy qua bước bếp ----------
@@ -220,7 +226,7 @@ def set_status(client, oid, status):
 
 
 def test_early_arrival_keeps_kitchen_status(client, monkeypatch):
-    monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid, sync=False: True)
     oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
     set_status(client, oid, "PREPARING")
 
@@ -240,8 +246,7 @@ def test_early_arrival_keeps_kitchen_status(client, monkeypatch):
 
 
 def test_arrival_rules(client):
-    momo = {**BODY, "payment_method": "MOMO"}
-    oid = client.post("/api/orders", json=momo, headers=auth(10, "CUSTOMER")).json()["id"]
+    oid = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()["id"]
     r = client.post(f"/api/orders/{oid}/arrived", headers=auth(10, "CUSTOMER"))
     assert r.status_code == 409 and "chưa được thanh toán" in r.json()["detail"]
 
@@ -290,9 +295,8 @@ def test_estimate_counts_orders_ahead(client):
     assert 7.9 < minutes_from_now(second["estimated_ready_at"]) <= 8
 
 
-def test_momo_estimate_set_only_after_payment(client):
-    body = {**BODY, "payment_method": "MOMO"}
-    created = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()
+def test_zalopay_estimate_set_only_after_payment(client):
+    created = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER")).json()
     assert created["estimated_ready_at"] is None                         # chưa trả tiền
 
     paid = client.post(f"/internal/orders/{created['id']}/payment-confirmed",
@@ -309,3 +313,44 @@ def test_estimate_resets_when_kitchen_starts(client):
                      headers=auth(20, "STAFF", 1))
     # bếp bắt đầu làm đơn này: không còn phải chờ đơn trước, xong sau 5 phút
     assert 4.9 < minutes_from_now(r.json()["estimated_ready_at"]) <= 5
+
+
+def test_zalopay_order_waits_for_payment(client):
+    r = client.post("/api/orders", json=ZP, headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 201
+    assert r.json()["status"] == "PENDING_PAYMENT"
+    assert r.json()["history"][-1]["note"] == "Chờ thanh toán ZaloPay"
+    paid = client.post(f"/internal/orders/{r.json()['id']}/payment-confirmed",
+                       json={"transaction_ref": "260000123"}, headers={"X-Internal-Key": "ik"})
+    assert paid.json()["status"] == "CONFIRMED"
+    order = client.get(f"/api/orders/{r.json()['id']}", headers=auth(10, "CUSTOMER")).json()
+    assert order["history"][-1]["note"] == "Thanh toán ZaloPay thành công (mã GD: 260000123)"
+
+
+# ---------- Mã giảm giá: khách chọn từ danh sách ----------
+def test_available_coupons_for_customer(client):
+    from datetime import date, timedelta
+
+    admin = auth(1, "ADMIN")
+    today = date.today()
+    for code, kind, value, start, end, active in (
+        ("GIAM10", "PERCENT", 10, today, today + timedelta(days=5), True),
+        ("BOT20K", "FIXED", 20000, today, today, True),
+        ("HETHAN", "FIXED", 5000, today - timedelta(days=9), today - timedelta(days=1), True),
+        ("TATMA", "FIXED", 5000, today, today, False),
+    ):
+        r = client.post("/api/orders/coupons", headers=admin, json={
+            "code": code, "discount_type": kind, "discount_value": value,
+            "valid_from": str(start), "valid_to": str(end), "is_active": active})
+        assert r.status_code == 201, r.text
+
+    assert client.get("/api/orders/coupons/available", params={"subtotal": 90000}).status_code == 401
+    r = client.get("/api/orders/coupons/available", params={"subtotal": 90000},
+                   headers=auth(10, "CUSTOMER"))
+    assert r.status_code == 200
+    # Chỉ mã đang bật và còn hạn, giảm nhiều nhất xếp trước
+    assert [(c["code"], c["discount_amount"]) for c in r.json()] == [("BOT20K", 20000), ("GIAM10", 9000)]
+    # Giảm không vượt quá tiền hàng
+    r = client.get("/api/orders/coupons/available", params={"subtotal": 15000},
+                   headers=auth(10, "CUSTOMER"))
+    assert r.json()[0] == {**r.json()[0], "code": "BOT20K", "discount_amount": 15000}

@@ -6,11 +6,12 @@ import { getStations } from '../api/menu.js'
 import { getMyOrders, getWaitTimes } from '../api/orders.js'
 import { getStationStats } from '../api/reviews.js'
 import Icon from '../components/Icon.jsx'
+import LicensePlate from '../components/LicensePlate.jsx'
 import { formatPrice, STATUS_LABEL } from '../format.js'
 
 const STEPS = [
   { icon: 'mapPin', title: 'Chọn cửa hàng', text: 'Chọn chi nhánh gần tuyến đường của bạn, xem menu và thời gian chờ.' },
-  { icon: 'card', title: 'Đặt & thanh toán', text: 'Thanh toán trực tuyến qua ví MoMo hoặc trả tiền mặt tại quầy.' },
+  { icon: 'card', title: 'Đặt & thanh toán', text: 'Thanh toán trực tuyến qua ZaloPay hoặc trả tiền mặt tại quầy.' },
   { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến" khi vào làn xe, nhân viên mang món ra tận nơi.' },
 ]
 
@@ -48,7 +49,7 @@ const FAQS = [
   },
   {
     q: 'Tôi có thể hủy đơn hoặc đổi phương thức thanh toán không?',
-    a: 'Có. Bạn hoàn toàn có thể hủy đơn hoặc đổi giữa MoMo và Tiền mặt trước khi bếp bắt đầu chế biến món. Nếu đã thanh toán qua MoMo, hệ thống sẽ hoàn tiền tự động về ví.',
+    a: 'Đơn chưa thanh toán và đơn trả tại quầy có thể hủy trên ứng dụng trước khi bếp bắt đầu chế biến món; đơn ZaloPay chưa thanh toán cũng đổi được sang trả tại quầy. Đơn đã thanh toán qua ZaloPay thì không hủy trên ứng dụng: vui lòng gọi hotline 1900 6868, cửa hàng sẽ hỗ trợ hủy đơn và hoàn tiền.',
   },
   {
     q: 'Món tại cửa hàng hết hàng thì sao?',
@@ -101,7 +102,7 @@ function ActiveOrders() {
           <li key={o.id}>
             <Link to={`/orders/${o.id}`} className="active-order">
               <span>
-                <strong>Đơn #{o.id}</strong> · {o.license_plate} · {formatPrice(o.total_amount)}
+                <strong>Đơn #{o.id}</strong> · <LicensePlate value={o.license_plate} size="sm" /> · {formatPrice(o.total_amount)}
               </span>
               <span className={`status-pill status-${o.status.toLowerCase()}`}>
                 {STATUS_LABEL[o.status]}
@@ -221,7 +222,7 @@ export default function StationsPage() {
       {/* 1. HERO BANNER CÓ ẢNH CHỤP THỰC TẾ */}
       <section className="hero hero-home">
         <div className="hero-content">
-          <span className="hero-pill">🚗 GoLane Drive-Thru · Đặt trước trên Web</span>
+          <span className="hero-pill with-icon"><Icon name="car" size={15} /> GoLane Drive-Thru · Đặt trước trên Web</span>
           <h1>Đặt trước, lái xe qua, nhận món nóng hổi tức thì</h1>
           <p className="hero-desc">
             Chọn chi nhánh thuận đường nhất, gọi món và thanh toán ngay trên web. Khi tới làn xe,
@@ -349,7 +350,7 @@ export default function StationsPage() {
       {/* 5. BANNER THỰC ĐƠN NỔI BẬT */}
       <section id="combo-promo" className="home-section promo-banner">
         <div className="promo-text">
-          <span className="promo-tag">🔥 Thực đơn bán chạy</span>
+          <span className="promo-tag with-icon"><Icon name="flame" size={14} /> Thực đơn bán chạy</span>
           <h2>Combo Gà Giòn & Burger Phô Mai</h2>
           <p>
             Thưởng thức bộ đôi Burger bò nướng phô mai tan chảy, Gà rán giòn rụm cùng Trà đào cam sả

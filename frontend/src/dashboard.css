@@ -212,19 +212,6 @@
   justify-content: space-between;
 }
 
-.ticket-plate {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 7px;
-  background: #fef08a;
-  color: #1c1917;
-  border: 2px solid #1c1917;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.1rem;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-}
-
 .ticket-id {
   color: var(--muted);
   font-weight: 600;

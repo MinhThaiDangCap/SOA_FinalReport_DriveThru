@@ -1,12 +1,25 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
-import { createOrder } from '../api/orders.js'
+import { createOrder, getAvailableCoupons } from '../api/orders.js'
 import Icon from '../components/Icon.jsx'
 import { useCart } from '../context/CartContext.jsx'
-import { formatPrice } from '../format.js'
+import { formatPrice, PAYMENT_METHODS } from '../format.js'
 import { payForOrder } from '../payment.js'
+
+/** "Giảm 10% (-8.700 ₫)" / "Giảm 20.000 ₫" (giỏ nhỏ hơn mức giảm: "Giảm 15.000 ₫") */
+function couponLabel(c) {
+  return c.discount_type === 'PERCENT'
+    ? `Giảm ${c.discount_value}% (-${formatPrice(c.discount_amount)})`
+    : `Giảm ${formatPrice(c.discount_amount)}`
+}
+
+/** "2027-02-15" -> "15/02/2027" */
+function formatDay(iso) {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
 
 // Biển số VN: 2 số tỉnh + 1-2 chữ cái (+ 1 số với xe máy) + 4-5 số. Bỏ qua dấu cách, "-" và ".".
 // Ví dụ hợp lệ: 51A-12345, 51A 123.45, 30LD-1234, 59X1-123.45
@@ -28,10 +41,36 @@ export default function CheckoutPage() {
   const [plate, setPlate] = useState('')
   const [plateTouched, setPlateTouched] = useState(false)
   const [coupon, setCoupon] = useState('')
-  const [method, setMethod] = useState('MOMO')
+  const [coupons, setCoupons] = useState([])
+  const [couponsState, setCouponsState] = useState('loading') // loading | ready | error
+  const [method, setMethod] = useState('ZALOPAY')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [placed, setPlaced] = useState(false)
+
+  // Tải mã giảm giá dùng được cho giỏ hàng hiện tại (số tiền giảm phụ thuộc tạm tính)
+  useEffect(() => {
+    if (!subtotal) return undefined
+    let cancelled = false
+    setCouponsState('loading')
+    getAvailableCoupons(subtotal)
+      .then((list) => {
+        if (cancelled) return
+        setCoupons(list)
+        setCouponsState('ready')
+        // Mã đang chọn không còn dùng được (vd. giỏ đổi): bỏ chọn
+        setCoupon((cur) => (list.some((c) => c.code === cur) ? cur : ''))
+      })
+      .catch(() => {
+        if (!cancelled) setCouponsState('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [subtotal])
+
+  const selectedCoupon = coupons.find((c) => c.code === coupon)
+  const discount = selectedCoupon ? selectedCoupon.discount_amount : 0
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -50,7 +89,7 @@ export default function CheckoutPage() {
         station_id: cart.stationId,
         license_plate: plate.trim(),
         payment_method: method,
-        coupon_code: coupon.trim() || null,
+        coupon_code: coupon || null,
         items: cart.items.map((i) => ({ menu_item_id: i.id, quantity: i.quantity })),
       })
     } catch (err) {
@@ -113,13 +152,23 @@ export default function CheckoutPage() {
           </li>
         ))}
       </ul>
-      <div className="cart-total">
+      <div className="cart-row checkout-subtotal">
         <span>Tạm tính</span>
-        <strong>{formatPrice(subtotal)}</strong>
+        <span>{formatPrice(subtotal)}</span>
       </div>
-      <p className="checkout-hint">
-        Mã giảm giá (nếu có) sẽ được áp dụng khi đặt đơn. Giá cuối cùng do hệ thống tính.
-      </p>
+      {selectedCoupon && (
+        <div className="cart-row checkout-discount">
+          <span className="with-icon">
+            <Icon name="ticket" size={16} /> Mã {selectedCoupon.code}
+          </span>
+          <span>-{formatPrice(discount)}</span>
+        </div>
+      )}
+      <div className="cart-total">
+        <span>Tổng thanh toán</span>
+        <strong>{formatPrice(subtotal - discount)}</strong>
+      </div>
+      <p className="checkout-hint">Giá cuối cùng do hệ thống tính lại khi đặt đơn.</p>
 
       <form className="form checkout-form" onSubmit={handleSubmit} noValidate>
         {error && <div className="form-error" role="alert">{error}</div>}
@@ -149,46 +198,64 @@ export default function CheckoutPage() {
         </label>
 
         <label className="field">
-          Mã giảm giá (không bắt buộc)
-          <input
+          Mã giảm giá
+          <select
+            className="coupon-select"
             value={coupon}
             onChange={(e) => setCoupon(e.target.value)}
-            maxLength={30}
-          />
+            disabled={couponsState !== 'ready' || coupons.length === 0}
+          >
+            <option value="">
+              {couponsState === 'loading'
+                ? 'Đang tải mã giảm giá...'
+                : coupons.length
+                  ? 'Không dùng mã giảm giá'
+                  : 'Hiện chưa có mã giảm giá'}
+            </option>
+            {coupons.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} · {couponLabel(c)} · HSD {formatDay(c.valid_to)}
+              </option>
+            ))}
+          </select>
+          {couponsState === 'error' ? (
+            <span className="field-error">Không tải được mã giảm giá. Bạn vẫn đặt đơn được.</span>
+          ) : (
+            couponsState === 'ready' &&
+            coupons.length > 0 && (
+              <span className="field-help">
+                Có {coupons.length} mã dùng được cho đơn này, sắp xếp theo số tiền giảm.
+              </span>
+            )
+          )}
         </label>
 
         <fieldset className="option-group">
           <legend>Hình thức thanh toán</legend>
-          <label className={`option ${method === 'MOMO' ? 'option-on' : ''}`}>
-            <input
-              type="radio"
-              name="method"
-              value="MOMO"
-              checked={method === 'MOMO'}
-              onChange={() => setMethod('MOMO')}
-            />
-            <span>
-              <strong>Thanh toán online (MoMo)</strong>
-              <small>Thanh toán ngay để đơn được xác nhận</small>
-            </span>
-          </label>
-          <label className={`option ${method === 'CASH' ? 'option-on' : ''}`}>
-            <input
-              type="radio"
-              name="method"
-              value="CASH"
-              checked={method === 'CASH'}
-              onChange={() => setMethod('CASH')}
-            />
-            <span>
-              <strong>Trả tại quầy</strong>
-              <small>Đơn gửi ngay tới cửa hàng, trả tiền mặt khi nhận món. Sau khi đặt không đổi sang MoMo được</small>
-            </span>
-          </label>
+          {PAYMENT_METHODS.map((m) => (
+            <label key={m.value} className={`option ${method === m.value ? 'option-on' : ''}`}>
+              <input
+                type="radio"
+                name="method"
+                value={m.value}
+                checked={method === m.value}
+                onChange={() => setMethod(m.value)}
+              />
+              <span className="option-icon">
+                <Icon name={m.icon} size={20} />
+              </span>
+              <span>
+                <strong>{m.title}</strong>
+                <small>
+                  {m.note} {m.checkoutNote}
+                </small>
+              </span>
+            </label>
+          ))}
         </fieldset>
 
         <button type="submit" className="btn btn-block" disabled={busy}>
-          {busy ? 'Đang xử lý...' : method === 'MOMO' ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
+          {busy ? 'Đang xử lý...' : PAYMENT_METHODS.find((m) => m.value === method)?.online ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
         </button>
       </form>
     </div>

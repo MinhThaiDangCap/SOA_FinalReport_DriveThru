@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import { errorMessage } from '../api/client.js'
-import { getMomoResult } from '../api/payments.js'
+import { getZaloPayResult } from '../api/payments.js'
 import Icon from '../components/Icon.jsx'
 import { formatPrice } from '../format.js'
 
@@ -19,7 +19,7 @@ export default function PaymentResultPage() {
 
     const check = async () => {
       try {
-        const data = await getMomoResult(search)
+        const data = await getZaloPayResult(search)
         if (cancelled) return
         setResult(data)
         if (data.payment_status === 'PENDING' && tries < 5) {
@@ -75,8 +75,8 @@ export default function PaymentResultPage() {
       </p>
       {tone === 'wait' && (
         <p className="auth-sub">
-          MoMo chưa gửi xác nhận về hệ thống. Đơn sẽ tự chuyển sang "Đã xác nhận" khi MoMo báo
-          về; bạn không cần thanh toán lại.
+          ZaloPay chưa gửi xác nhận về hệ thống. Đơn sẽ tự chuyển sang "Đã xác nhận" khi ZaloPay
+          báo về; bạn không cần thanh toán lại.
         </p>
       )}
       <Link to={`/orders/${result.order_id}`} className="btn btn-block">

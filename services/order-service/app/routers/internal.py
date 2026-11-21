@@ -29,7 +29,7 @@ def payment_confirmed(
     order = get_order_or_404(db, order_id, lock=True)
 
     if order.status == OrderStatus.PENDING_PAYMENT.value:
-        note = "Thanh toán MoMo thành công"
+        note = "Thanh toán ZaloPay thành công"
         if payload.transaction_ref:
             note += f" (mã GD: {payload.transaction_ref})"
         change_status(order, OrderStatus.CONFIRMED, None, note)
@@ -37,20 +37,21 @@ def payment_confirmed(
         db.commit()
         db.refresh(order)
     elif order.status == OrderStatus.CANCELLED.value:
-        # Khách đã hủy rồi mà tiền vẫn về: báo lỗi để payment-service xử lý hoàn tiền
+        # Khách đã hủy rồi mà tiền vẫn về: báo lỗi để payment-service ghi chú cho cửa hàng
+        # hoàn tiền qua hotline
         from fastapi import HTTPException
 
         raise HTTPException(status_code=409, detail="Đơn đã bị hủy")
     elif order.payment_method == "CASH":
-        # Khách đã mở trang MoMo rồi mới đổi sang trả tại quầy, sau đó vẫn trả MoMo xong:
-        # tiền đã vào, ghi lại là MoMo để quầy không thu tiền mặt lần nữa
-        order.payment_method = "MOMO"
+        # Khách đã mở trang ZaloPay rồi mới đổi sang trả tại quầy, sau đó vẫn trả xong:
+        # tiền đã vào, ghi lại là ZaloPay để quầy không thu tiền mặt lần nữa
+        order.payment_method = "ZALOPAY"
         order.history.append(
             OrderStatusHistory(
                 from_status=order.status,
                 to_status=order.status,
                 changed_by=None,
-                note="Khách đã thanh toán MoMo, không cần thu tiền mặt",
+                note="Khách đã thanh toán ZaloPay, không cần thu tiền mặt",
             )
         )
         db.commit()

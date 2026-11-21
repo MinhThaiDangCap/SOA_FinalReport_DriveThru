@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from app.coupons import apply_coupon
 from app.database import get_db
 from app.models import Coupon
-from app.schemas import CouponCheckOut, CouponCreate, CouponOut, CouponUpdate
+from app.schemas import (
+    CouponAvailableOut,
+    CouponCheckOut,
+    CouponCreate,
+    CouponOut,
+    CouponUpdate,
+)
 from app.security import get_current_user, require_roles
 
 router = APIRouter(prefix="/api/orders/coupons", tags=["coupons"])
@@ -34,6 +40,37 @@ def check_coupon(
     return CouponCheckOut(
         code=applied, discount_amount=discount, total_amount=subtotal - discount
     )
+
+
+# ---------- Khách: các mã đang dùng được (cho ô chọn mã ở trang đặt đơn) ----------
+@router.get("/available", response_model=list[CouponAvailableOut])
+def available_coupons(
+    subtotal: int = Query(gt=0, description="Tổng tiền hàng trước giảm giá (VND)"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    """Mã đang bật và còn hạn hôm nay, kèm số tiền giảm cho giỏ hàng; giảm nhiều nhất xếp trước."""
+    today = date.today()
+    coupons = db.scalars(
+        select(Coupon).where(
+            Coupon.is_active.is_(True),
+            Coupon.valid_from <= today,
+            Coupon.valid_to >= today,
+        )
+    ).all()
+    out = []
+    for c in coupons:
+        discount, _ = apply_coupon(db, c.code, subtotal)
+        out.append(
+            CouponAvailableOut(
+                code=c.code,
+                discount_type=c.discount_type,
+                discount_value=c.discount_value,
+                valid_to=c.valid_to,
+                discount_amount=discount,
+            )
+        )
+    return sorted(out, key=lambda c: (-c.discount_amount, c.code))
 
 
 # ---------- Admin: tạo mã ----------

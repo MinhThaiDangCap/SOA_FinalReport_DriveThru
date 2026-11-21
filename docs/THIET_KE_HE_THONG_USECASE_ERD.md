@@ -10,20 +10,20 @@ Tài liệu này được tổng hợp **nhất quán 100% với mã nguồn th�
 1. **Khách hàng (`CUSTOMER`)**: Đặt món, thanh toán, theo dõi tiến trình, báo "Tôi đã đến", hủy đơn, đánh giá.
 2. **Nhân viên quầy (`STAFF`)**: Xử lý hàng đợi đơn tại cửa hàng mình phụ trách, thu tiền mặt, cập nhật món còn/hết, xem đánh giá của cửa hàng.
 3. **Quản trị viên (`ADMIN`)**: Kế thừa toàn bộ quyền quản lý cửa hàng, thực đơn, mã giảm giá, tài khoản nhân viên và xem thống kê toàn hệ thống.
-4. **Cổng thanh toán MoMo Sandbox (External System)**: Xử lý giao dịch thanh toán online, gửi kết quả IPN và xử lý hoàn tiền.
+4. **Cổng thanh toán ZaloPay Sandbox (External System)**: Xử lý giao dịch thanh toán online (QR, thẻ ATM, thẻ quốc tế), gửi kết quả qua callback và cho tra cứu trạng thái giao dịch.
 
 ```mermaid
 flowchart LR
     C((Khách hàng))
     S((Nhân viên Quầy))
     A((Quản trị viên))
-    M((MoMo Sandbox))
+    M((ZaloPay Sandbox))
 
     subgraph GoLane["Hệ thống GoLane Drive-Thru (Microservices)"]
         UC1["Đăng ký / Đăng nhập (JWT)"]
         UC2["Xem cửa hàng & Thực đơn theo trạm"]
         UC3["Đặt đơn Drive-Thru (Biển số xe, Coupon)"]
-        UC4["Thanh toán Online MoMo"]
+        UC4["Thanh toán Online ZaloPay"]
         UC5["Đổi phương thức thanh toán / Hủy đơn"]
         UC6["Bấm 'Tôi đã đến' (arrived_at)"]
         UC7["Đánh giá đơn hoàn thành (1-5 sao)"]
@@ -69,9 +69,9 @@ flowchart LR
 |---|---|---|---|---|
 | **UC01** | Đăng ký / Đăng nhập | Tất cả | `auth-service` | Băm mật khẩu `bcrypt`, cấp `access_token` (JWT) + `refresh_token`. |
 | **UC02** | Xem cửa hàng & Menu | Khách hàng | `menu-service` | Hiển thị cửa hàng đang mở, thực đơn kèm trạng thái còn/hết từng món. |
-| **UC03** | Đặt đơn Drive-Thru | Khách hàng | `order-service` | Nhập biển số xe, chọn `MOMO` hoặc `CASH`, kiểm tra giá từ `menu-service`, áp dụng coupon. |
-| **UC04** | Thanh toán MoMo | Khách hàng, MoMo | `payment-service` | Tạo link MoMo, xác thực chữ ký HMAC-SHA256, báo `order-service` sang `CONFIRMED`. |
-| **UC05** | Hủy đơn / Đổi PTTT | Khách hàng | `order-service`, `payment-service` | Hủy được trước khi bếp làm (`PREPARING`); đơn MoMo đã trả được hoàn tiền về ví trước khi hủy. Chỉ đơn MoMo **chưa trả tiền** đổi được sang trả tại quầy; đơn trả tại quầy đã gửi tới cửa hàng nên **không** đổi sang MoMo (không rút đơn khỏi hàng đợi của quầy). |
+| **UC03** | Đặt đơn Drive-Thru | Khách hàng | `order-service` | Nhập biển số xe, chọn `ZALOPAY` hoặc `CASH`, kiểm tra giá từ `menu-service`, áp dụng coupon. |
+| **UC04** | Thanh toán ZaloPay | Khách hàng, ZaloPay | `payment-service` | Tạo đơn ZaloPay (ký `key1`), nhận callback và kiểm tra chữ ký HMAC-SHA256 (`key2`), tra cứu khi callback chưa tới, báo `order-service` sang `CONFIRMED`. |
+| **UC05** | Hủy đơn / Đổi PTTT | Khách hàng | `order-service`, `payment-service` | Đơn **chưa thanh toán** hủy được trước khi bếp làm (`PREPARING`); trước khi hủy, hệ thống hỏi lại ZaloPay để không hủy nhầm đơn khách vừa trả. Đơn **đã thanh toán ZaloPay không hủy trên ứng dụng**: khách gọi hotline, cửa hàng hủy và hoàn tiền (ngoài phạm vi hệ thống). Chỉ đơn ZaloPay **chưa trả tiền** đổi được sang trả tại quầy; đơn trả tại quầy đã gửi tới cửa hàng nên **không** đổi sang ZaloPay (không rút đơn khỏi hàng đợi của quầy). |
 | **UC03b** | Xem giờ xong dự kiến | Khách hàng, Nhân viên | `order-service`, `menu-service` | Tính từ số phút làm từng món (`prep_minutes`), các đơn đang chờ và số đơn bếp làm cùng lúc (`kitchen_capacity`); tính lại khi bếp bắt đầu làm. |
 | **UC06** | Báo "Tôi đã đến" | Khách hàng | `order-service` | Ghi `arrived_at` để đẩy thẻ xe lên đầu hàng đợi và bật chuông báo trên màn hình quầy. |
 | **UC07** | Đánh giá dịch vụ | Khách hàng | `feedback-service` | Chỉ đánh giá đơn `COMPLETED`, mỗi đơn 1 lần. Chấm 1–2 sao **bắt buộc** ghi lý do. |
@@ -173,7 +173,7 @@ erDiagram
         int station_id "Logical -> menu_db.stations.id"
         varchar license_plate
         varchar status "PENDING_PAYMENT|CONFIRMED|PREPARING|READY|COMPLETED|CANCELLED"
-        varchar payment_method "MOMO | CASH"
+        varchar payment_method "ZALOPAY | CASH"
         int subtotal
         int discount_amount
         int total_amount
@@ -219,11 +219,11 @@ erDiagram
         int id PK
         int order_id "Logical -> order_db.orders.id"
         int customer_id "Logical -> auth_db.users.id"
-        varchar method "MOMO | CASH"
+        varchar method "ZALOPAY | CASH"
         int amount
-        varchar status "PENDING|SUCCESS|FAILED|REFUNDED"
+        varchar status "PENDING|SUCCESS|FAILED"
         varchar txn_ref UK
-        varchar vnp_transaction_no "Mã GD MoMo (tên cột cũ)"
+        varchar vnp_transaction_no "Mã GD ZaloPay zp_trans_id (tên cột cũ)"
         varchar bank_code
         varchar note
         int collected_by "Logical -> auth_db.users.id"
@@ -239,7 +239,7 @@ erDiagram
         varchar response_code
         datetime received_at
     }
-    payments ||--o{ payment_callbacks : "lưu log IPN"
+    payments ||--o{ payment_callbacks : "lưu log callback"
 
     %% ===== 5. FEEDBACK_DB =====
     reviews {
@@ -345,7 +345,7 @@ erDiagram
 | `station_id` | `INTEGER` | `NOT NULL, INDEX` | Tham chiếu logic `menu_db.stations.id` |
 | `license_plate` | `VARCHAR(20)` | `NOT NULL` | Biển số xe nhận món |
 | `status` | `VARCHAR(20)` | `NOT NULL, INDEX` | `PENDING_PAYMENT`, `CONFIRMED`, `PREPARING`, `READY`, `COMPLETED`, `CANCELLED` |
-| `payment_method` | `VARCHAR(10)` | `NOT NULL` | `MOMO` hoặc `CASH` |
+| `payment_method` | `VARCHAR(10)` | `NOT NULL` | `ZALOPAY` hoặc `CASH` |
 | `subtotal` | `INTEGER` | `DEFAULT 0` | Tạm tính (VND) |
 | `discount_amount` | `INTEGER` | `DEFAULT 0` | Số tiền giảm giá (VND) |
 | `total_amount` | `INTEGER` | `DEFAULT 0` | Tổng thanh toán (VND) |
@@ -399,11 +399,11 @@ erDiagram
 | `id` | `INTEGER` | `PK, AUTO_INCREMENT` | Mã giao dịch nội bộ |
 | `order_id` | `INTEGER` | `NOT NULL, INDEX` | Tham chiếu logic `order_db.orders.id` |
 | `customer_id` | `INTEGER` | `NOT NULL, INDEX` | Tham chiếu logic `auth_db.users.id` |
-| `method` | `VARCHAR(10)` | `NOT NULL` | `MOMO` hoặc `CASH` |
+| `method` | `VARCHAR(10)` | `NOT NULL` | `ZALOPAY` hoặc `CASH` |
 | `amount` | `INTEGER` | `NOT NULL` | Số tiền (VND) |
-| `status` | `VARCHAR(10)` | `DEFAULT 'PENDING', INDEX` | `PENDING`, `SUCCESS`, `FAILED`, `REFUNDED` |
-| `txn_ref` | `VARCHAR(40)` | `UNIQUE, NOT NULL, INDEX` | Mã tham chiếu giao dịch gửi MoMo |
-| `vnp_transaction_no` | `VARCHAR(40)` | `NULL` | Mã giao dịch từ cổng MoMo trả về (giữ tên cột từ bản VNPay cũ; trong code là `transaction_no`) |
+| `status` | `VARCHAR(10)` | `DEFAULT 'PENDING', INDEX` | `PENDING`, `SUCCESS`, `FAILED` |
+| `txn_ref` | `VARCHAR(40)` | `UNIQUE, NOT NULL, INDEX` | Mã tham chiếu giao dịch gửi ZaloPay (`app_trans_id`, dạng `yymmdd_...`) |
+| `vnp_transaction_no` | `VARCHAR(40)` | `NULL` | Mã giao dịch ZaloPay trả về (`zp_trans_id`; giữ tên cột từ bản VNPay cũ; trong code là `transaction_no`) |
 | `bank_code` | `VARCHAR(20)` | `NULL` | Mã ngân hàng / phương thức |
 | `note` | `VARCHAR(200)` | `NULL` | Ghi chú |
 | `collected_by` | `INTEGER` | `NULL` | ID nhân viên xác nhận thu tiền mặt |
@@ -416,9 +416,9 @@ erDiagram
 | `id` | `INTEGER` | `PK, AUTO_INCREMENT` | Khóa chính |
 | `payment_id` | `INTEGER` | `FK -> payments(id), NULL, INDEX` | Giao dịch tương ứng |
 | `txn_ref` | `VARCHAR(60)` | `NOT NULL, INDEX` | Mã tham chiếu |
-| `raw_params` | `TEXT` | `NOT NULL` | Dữ liệu gốc MoMo gửi về (để đối soát) |
+| `raw_params` | `TEXT` | `NOT NULL` | Dữ liệu gốc ZaloPay gửi về hoặc kết quả tra cứu (để đối soát) |
 | `signature_valid` | `BOOLEAN` | `NOT NULL` | Chữ ký HMAC-SHA256 hợp lệ hay không |
-| `response_code` | `VARCHAR(5)` | `NULL` | Mã phản hồi từ MoMo (`0` = thành công) |
+| `response_code` | `VARCHAR(5)` | `NULL` | Mã phản hồi từ ZaloPay (`1` = thành công) |
 | `received_at` | `TIMESTAMPTZ` | `DEFAULT NOW()` | Thời điểm nhận callback |
 
 ---
@@ -441,12 +441,12 @@ erDiagram
 
 ## 4. SƠ ĐỒ KIẾN TRÚC MICROSERVICES TỔNG THỂ
 
-Sơ đồ dưới đây thể hiện đầy đủ kiến trúc **GoLane Drive-Thru** đang chạy trong Docker Compose, bao gồm tầng Gateway, 5 Microservices, 5 Database độc lập, 4 luồng gọi nội bộ (`X-Internal-Key`), cổng thanh toán MoMo Sandbox và hệ thống giám sát Prometheus + Grafana.
+Sơ đồ dưới đây thể hiện đầy đủ kiến trúc **GoLane Drive-Thru** đang chạy trong Docker Compose, bao gồm tầng Gateway, 5 Microservices, 5 Database độc lập, 4 luồng gọi nội bộ (`X-Internal-Key`), cổng thanh toán ZaloPay Sandbox và hệ thống giám sát Prometheus + Grafana.
 
 ```mermaid
 flowchart TB
     Client["Trình duyệt Web (React 18)<br/>Khách hàng · Nhân viên · Admin"]
-    MoMo["MoMo Sandbox API<br/>(Dịch vụ bên ngoài)"]
+    ZaloPay["ZaloPay Sandbox API<br/>(Dịch vụ bên ngoài)"]
     Ngrok["ngrok HTTPS Tunnel<br/>(Public Internet URL)"]
 
     subgraph Docker["Docker Compose Network (drivethru-network)"]
@@ -456,7 +456,7 @@ flowchart TB
             AUTH["auth-service (:8001)<br/>Đăng ký, Login, JWT, Nhân viên"]
             MENU["menu-service (:8002)<br/>Chi nhánh, Menu, Còn/Hết món"]
             ORDER["order-service (:8003)<br/>Đặt đơn, Coupon, Hàng đợi, Trạng thái"]
-            PAY["payment-service (:8004)<br/>MoMo, Tiền mặt, Hoàn tiền"]
+            PAY["payment-service (:8004)<br/>ZaloPay, Tiền mặt"]
             FB["feedback-service (:8005)<br/>Đánh giá 1-5 sao, Thống kê"]
         end
 
@@ -477,7 +477,7 @@ flowchart TB
     Client -->|HTTPS| Ngrok
     Ngrok --> GW
     Client -.->|Local :8080| GW
-    MoMo -.->|IPN Webhook| Ngrok
+    ZaloPay -.->|Callback| Ngrok
 
     GW -->|/api/auth| AUTH
     GW -->|/api/menu| MENU
@@ -494,9 +494,9 @@ flowchart TB
     %% Gọi nội bộ giữa các service (REST + X-Internal-Key)
     ORDER -->|"(1) Lấy giá & kiểm tra món"| MENU
     PAY -->|"(2) Lấy tổng tiền & xác nhận đã trả"| ORDER
-    ORDER -->|"(3) Hoàn tiền khi hủy đơn MoMo"| PAY
+    ORDER -->|"(3) Kiểm tra đơn đã thanh toán"| PAY
     FB -->|"(4) Kiểm tra đơn COMPLETED"| ORDER
-    PAY <-->|Tạo GD / Hoàn tiền| MoMo
+    PAY <-->|Tạo đơn / Tra cứu| ZaloPay
 
     PROM -.->|Scrape /metrics| Services
     GRAF -.->|PromQL| PROM
@@ -508,9 +508,8 @@ flowchart TB
 | :---: | :--- | :--- | :--- | :--- |
 | **1** | `order-service` | `menu-service` | `GET /internal/items?station_id=&ids=` | Lấy tên, giá gốc, số phút làm và kiểm tra món còn bán tại chi nhánh. |
 | **1b** | `order-service` | `menu-service` | `GET /internal/stations` | Lấy số đơn bếp làm cùng lúc của từng cửa hàng để ước lượng thời gian chờ (lỗi thì dùng mặc định 2, không chặn đặt đơn). |
-| **2** | `payment-service` | `order-service` | `GET /internal/orders/{id}` & `POST .../payment-confirmed` | Lấy số tiền cần thu và chuyển đơn sang `CONFIRMED` sau khi MoMo báo thành công. |
-| **3** | `order-service` | `payment-service` | `POST /internal/payments/order/{id}/refund` | Tự động hoàn tiền về ví MoMo khi khách hủy đơn đã thanh toán trước khi bếp làm. |
-| **3b** | `order-service` | `payment-service` | `GET /internal/payments/order/{id}/paid` | Kiểm tra đơn đã thu tiền chưa: chặn hoàn thành đơn tiền mặt chưa thu, chặn đổi phương thức khi đã trả. |
+| **2** | `payment-service` | `order-service` | `GET /internal/orders/{id}` & `POST .../payment-confirmed` | Lấy số tiền cần thu và chuyển đơn sang `CONFIRMED` sau khi ZaloPay báo thành công. |
+| **3** | `order-service` | `payment-service` | `GET /internal/payments/order/{id}/paid` | Kiểm tra đơn đã thu tiền chưa: chặn hoàn thành đơn tiền mặt chưa thu. Với `?sync=true` (khi khách hủy đơn / đổi sang trả tại quầy), payment-service hỏi lại ZaloPay các giao dịch đang chờ để không hủy nhầm đơn khách vừa quét mã xong. |
 | **4** | `feedback-service` | `order-service` | `GET /internal/orders/{id}` | Xác minh đơn hàng đã `COMPLETED` và đúng chủ sở hữu trước khi cho phép đánh giá. |
 
 ---
@@ -519,14 +518,14 @@ flowchart TB
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING_PAYMENT: Khách chọn MoMo
+    [*] --> PENDING_PAYMENT: Khách chọn ZaloPay
     [*] --> CONFIRMED: Khách chọn Trả tại quầy (CASH)
 
-    PENDING_PAYMENT --> CONFIRMED: MoMo xác nhận thanh toán thành công
+    PENDING_PAYMENT --> CONFIRMED: ZaloPay xác nhận thanh toán thành công
     PENDING_PAYMENT --> CANCELLED: Khách hủy đơn
 
     CONFIRMED --> PREPARING: Nhân viên bấm "Bắt đầu làm"
-    CONFIRMED --> CANCELLED: Khách hủy (tự động hoàn ví nếu trả MoMo)
+    CONFIRMED --> CANCELLED: Khách hủy đơn trả tại quầy (đơn ZaloPay đã trả: gọi hotline)
 
     PREPARING --> READY: Nhân viên bấm "Món đã xong"
     READY --> COMPLETED: Nhân viên giao món (thu tiền mặt nếu CASH)

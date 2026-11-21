@@ -45,6 +45,15 @@ QUEUE_STATUSES = [
 
 
 # ---------- Hàm dùng chung ----------
+# Hủy đơn đã thanh toán ZaloPay và hoàn tiền nằm ngoài phạm vi hệ thống: cửa hàng xử lý
+# qua hotline (hoàn tiền trên trang quản lý của ZaloPay)
+HOTLINE = "1900 6868"
+PAID_CANCEL_MESSAGE = (
+    "Đơn đã thanh toán qua ZaloPay nên không thể hủy trên ứng dụng. "
+    f"Vui lòng liên hệ hotline cửa hàng {HOTLINE} để được hỗ trợ hủy đơn và hoàn tiền."
+)
+
+
 def get_order_or_404(db: Session, order_id: int, lock: bool = False) -> Order:
     """lock=True khóa dòng đơn hàng (FOR UPDATE) để 2 request không đổi trạng thái cùng lúc."""
     stmt = select(Order).where(Order.id == order_id)
@@ -112,13 +121,13 @@ def create_order(
     # 3. Mã giảm giá
     discount, coupon_code = apply_coupon(db, payload.coupon_code, subtotal)
 
-    # 4. Trả tại quầy vào thẳng CONFIRMED, MoMo phải chờ thanh toán
+    # 4. Trả tại quầy vào thẳng CONFIRMED, ZaloPay phải chờ thanh toán
     if payload.payment_method == "CASH":
         status = OrderStatus.CONFIRMED.value
         note = "Khách chọn trả tại quầy"
     else:
         status = OrderStatus.PENDING_PAYMENT.value
-        note = "Chờ thanh toán MoMo"
+        note = "Chờ thanh toán ZaloPay"
 
     order = Order(
         customer_id=user["id"],
@@ -332,9 +341,21 @@ def cancel_order(
     db: Session = Depends(get_db),
     user: dict = Depends(require_roles("CUSTOMER")),
 ):
-    order = get_order_or_404(db, order_id, lock=True)
+    order = get_order_or_404(db, order_id)
     if order.customer_id != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
+
+    # Đơn ZaloPay đang chờ: khách có thể vừa quét mã xong mà callback chưa tới.
+    # Hỏi payment-service (tự tra cứu ZaloPay) TRƯỚC khi khóa đơn: nếu đã trả thì
+    # payment-service gọi lại order-service xác nhận đơn, đơn chuyển sang CONFIRMED.
+    if (
+        order.payment_method == "ZALOPAY"
+        and order.status == OrderStatus.PENDING_PAYMENT.value
+    ):
+        payment_client.is_paid(order.id, sync=True)
+        db.expire_all()
+
+    order = get_order_or_404(db, order_id, lock=True)
 
     # Chỉ hủy được khi cửa hàng CHƯA bắt đầu làm món
     cancellable = (OrderStatus.PENDING_PAYMENT.value, OrderStatus.CONFIRMED.value)
@@ -350,15 +371,14 @@ def cancel_order(
             ),
         )
 
-    note = "Khách hủy đơn"
-    # Đơn MoMo đã CONFIRMED tức là đã trả tiền: hoàn tiền trước, thành công mới hủy
-    if order.payment_method == "MOMO" and order.status == OrderStatus.CONFIRMED.value:
-        result = payment_client.refund_order(order.id)
-        if result.get("refunded"):
-            amount = f"{result.get('amount', 0):,}".replace(",", ".")
-            note = f"Khách hủy đơn, đã hoàn {amount}đ về ví MoMo"
+    # Đơn ZaloPay đã CONFIRMED tức là đã trả tiền: không cho tự hủy, khách gọi hotline
+    if (
+        order.payment_method == "ZALOPAY"
+        and order.status == OrderStatus.CONFIRMED.value
+    ):
+        raise HTTPException(status_code=409, detail=PAID_CANCEL_MESSAGE)
 
-    change_status(order, OrderStatus.CANCELLED, user["id"], note)
+    change_status(order, OrderStatus.CANCELLED, user["id"], "Khách hủy đơn")
     db.commit()
     db.refresh(order)
     return order
@@ -372,16 +392,16 @@ def change_payment_method(
     db: Session = Depends(get_db),
     user: dict = Depends(require_roles("CUSTOMER")),
 ):
-    """Chỉ cho đổi MOMO -> CASH khi đơn MoMo CHƯA được thanh toán.
+    """Chỉ cho đổi ZALOPAY -> CASH khi đơn ZaloPay CHƯA được thanh toán.
 
-    MOMO -> CASH: đơn đang chờ thanh toán -> vào thẳng hàng đợi của quầy (CONFIRMED).
-    CASH -> MOMO: KHÔNG cho đổi. Đơn trả tại quầy đã nằm trong hàng đợi của cửa hàng,
+    ZALOPAY -> CASH: đơn đang chờ thanh toán -> vào thẳng hàng đợi của quầy (CONFIRMED).
+    CASH -> ZALOPAY: KHÔNG cho đổi. Đơn trả tại quầy đã nằm trong hàng đợi của cửa hàng,
     rút đơn về "chờ thanh toán" sẽ làm đơn biến mất khỏi màn hình quầy và dễ xung đột
     khi nhân viên đang bấm "Bắt đầu làm" (giống các app giao đồ ăn: đơn tiền mặt đã đặt
     thì không đổi phương thức). Khách muốn trả online thì hủy đơn khi bếp chưa làm và
     đặt lại.
     """
-    order = get_order_or_404(db, order_id, lock=True)
+    order = get_order_or_404(db, order_id)
     if order.customer_id != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
 
@@ -389,28 +409,34 @@ def change_payment_method(
     if order.payment_method == new_method:
         return order  # không đổi gì
 
-    if new_method == "MOMO":
+    if order.payment_method == "CASH":
         raise HTTPException(
             status_code=409,
-            detail="Đơn trả tại quầy đã được gửi tới cửa hàng nên không thể đổi sang MoMo. "
+            detail="Đơn trả tại quầy đã được gửi tới cửa hàng nên không thể đổi sang ZaloPay. "
             "Nếu muốn thanh toán online, bạn có thể hủy đơn (khi cửa hàng chưa làm món) "
             "và đặt lại.",
         )
 
+    # Hỏi payment-service (tự tra cứu ZaloPay) TRƯỚC khi khóa đơn: khách có thể vừa
+    # quét mã xong mà callback chưa tới, đã trả rồi thì không được đổi sang tiền mặt
+    if order.status == OrderStatus.PENDING_PAYMENT.value and payment_client.is_paid(
+        order.id, sync=True
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Đơn đã được thanh toán, không thể đổi phương thức thanh toán.",
+        )
+    db.expire_all()
+
+    order = get_order_or_404(db, order_id, lock=True)
     if order.status != OrderStatus.PENDING_PAYMENT.value:
         raise HTTPException(
             status_code=409,
             detail="Đơn đã được thanh toán hoặc cửa hàng đã bắt đầu làm món, "
             "không thể đổi phương thức thanh toán nữa.",
         )
-    # Hỏi payment-service: tránh trường hợp MoMo vừa báo đã trả mà đơn chưa kịp cập nhật
-    if payment_client.is_paid(order.id):
-        raise HTTPException(
-            status_code=409,
-            detail="Đơn đã được thanh toán, không thể đổi phương thức thanh toán.",
-        )
 
-    # MOMO (chưa trả) -> CASH: đơn vào thẳng hàng đợi của quầy
+    # ZaloPay (chưa trả) -> CASH: đơn vào thẳng hàng đợi của quầy
     order.payment_method = "CASH"
     change_status(order, OrderStatus.CONFIRMED, user["id"], "Khách đổi sang trả tại quầy")
     update_estimate(db, order)

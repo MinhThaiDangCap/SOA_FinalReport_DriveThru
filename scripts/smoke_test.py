@@ -7,7 +7,7 @@ Chạy sau khi `docker compose up -d --build` (chỉ cần Python 3, không cầ
 
 Script đi hết một vòng nghiệp vụ như người dùng thật và dừng ở bước đầu tiên bị sai:
 đăng nhập 3 vai trò -> xem menu -> đặt đơn trả tại quầy -> quầy làm món, thu tiền, giao món
--> khách đánh giá -> tạo giao dịch MoMo -> kiểm tra bảo mật (token, phân quyền, /internal).
+-> khách đánh giá -> tạo giao dịch ZaloPay -> kiểm tra bảo mật (token, phân quyền, /internal).
 Dữ liệu tạo ra là đơn và đánh giá thật trong database (tài khoản mẫu, cửa hàng 1).
 """
 
@@ -127,18 +127,18 @@ def main():
            token=customer, body={"order_id": oid, "rating": 4})
     expect(api, "Thống kê đánh giá cửa hàng 1", "GET", "/api/reviews/stations/1/stats", 200)
 
-    print("\n6. Thanh toán MoMo (payment-service gọi MoMo sandbox)")
-    momo_order = expect(api, "Tạo đơn MoMo", "POST", "/api/orders", 201, token=customer, body={
-        "station_id": 1, "license_plate": "51A-99999", "payment_method": "MOMO",
+    print("\n6. Thanh toán ZaloPay (payment-service gọi ZaloPay sandbox)")
+    zp_order = expect(api, "Tạo đơn ZaloPay", "POST", "/api/orders", 201, token=customer, body={
+        "station_id": 1, "license_plate": "51A-99999", "payment_method": "ZALOPAY",
         "items": [{"menu_item_id": item["id"], "quantity": 1}],
     })
-    check("Đơn MoMo chờ thanh toán", momo_order["status"] == "PENDING_PAYMENT", momo_order)
-    pay = expect(api, "Tạo giao dịch MoMo", "POST", "/api/payments/momo/create", 201,
-                 token=customer, body={"order_id": momo_order["id"]})
+    check("Đơn ZaloPay chờ thanh toán", zp_order["status"] == "PENDING_PAYMENT", zp_order)
+    pay = expect(api, "Tạo giao dịch ZaloPay", "POST", "/api/payments/zalopay/create", 201,
+                 token=customer, body={"order_id": zp_order["id"]})
     url = pay.get("payment_url", "")
-    mode = "giả lập (PAYMENT_MOCK_MODE=true)" if "/mock/" in url else "MoMo sandbox"
+    mode = "giả lập (PAYMENT_MOCK_MODE=true)" if "/mock/" in url else "ZaloPay sandbox"
     check(f"Có link thanh toán, chế độ: {mode}", url.startswith("http"), pay)
-    expect(api, "Hủy đơn MoMo chưa trả", "POST", f"/api/orders/{momo_order['id']}/cancel", 200,
+    expect(api, "Hủy đơn ZaloPay chưa trả", "POST", f"/api/orders/{zp_order['id']}/cancel", 200,
            token=customer)
 
     print("\n7. Bảo mật")

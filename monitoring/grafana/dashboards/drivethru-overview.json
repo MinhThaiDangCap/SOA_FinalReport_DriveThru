@@ -397,7 +397,7 @@
       ],
       "title": "Nghiệp Vụ: Đơn Mới Theo Phương Thức Thanh Toán (order-service)",
       "type": "timeseries",
-      "description": "Tổng số đơn đã tạo, chia theo MOMO / CASH (cộng dồn từ lúc service khởi động)."
+      "description": "Tổng số đơn đã tạo, chia theo ZALOPAY / CASH (cộng dồn từ lúc service khởi động)."
     },
     {
       "datasource": {
@@ -589,7 +589,7 @@
       ],
       "title": "Nghiệp Vụ: Giao Dịch Thanh Toán Theo Kết Quả (payment-service)",
       "type": "timeseries",
-      "description": "Số giao dịch MoMo / tiền mặt theo kết quả (thành công, thất bại, hoàn tiền...)."
+      "description": "Số giao dịch ZaloPay / tiền mặt theo kết quả (thành công, thất bại)."
     },
     {
       "datasource": {
