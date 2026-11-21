@@ -160,30 +160,37 @@ def change_method(client, oid, method, uid=10):
                         headers=auth(uid, "CUSTOMER"))
 
 
-def test_switch_momo_to_cash_and_back(client, monkeypatch):
+def test_switch_unpaid_momo_to_cash(client, monkeypatch):
     monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
     body = {**BODY, "payment_method": "MOMO"}
     oid = client.post("/api/orders", json=body, headers=auth(10, "CUSTOMER")).json()["id"]
 
+    assert change_method(client, oid, "CASH", uid=11).status_code == 403  # đơn người khác
     r = change_method(client, oid, "CASH")
     assert r.status_code == 200
     assert (r.json()["payment_method"], r.json()["status"]) == ("CASH", "CONFIRMED")
     assert r.json()["history"][-1]["note"] == "Khách đổi sang trả tại quầy"
+    assert r.json()["estimated_ready_at"] is not None          # đã vào hàng đợi của bếp
+    assert change_method(client, oid, "CASH").status_code == 200  # giữ nguyên, không lỗi
 
+
+def test_cash_order_cannot_switch_to_momo(client, monkeypatch):
+    """Đơn trả tại quầy đã nằm trong hàng đợi: không rút về chờ thanh toán."""
+    monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
+    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
     r = change_method(client, oid, "MOMO")
-    assert (r.json()["payment_method"], r.json()["status"]) == ("MOMO", "PENDING_PAYMENT")
-    assert change_method(client, oid, "MOMO").status_code == 200  # giữ nguyên, không lỗi
-    assert change_method(client, oid, "CASH", uid=11).status_code == 403  # đơn người khác
+    assert r.status_code == 409 and "hủy đơn" in r.json()["detail"]
+
+    order = client.get(f"/api/orders/{oid}", headers=auth(10, "CUSTOMER")).json()
+    assert (order["payment_method"], order["status"]) == ("CASH", "CONFIRMED")
+    queue = client.get("/api/orders/queue", headers=auth(20, "STAFF", 1)).json()
+    assert any(o["id"] == oid for o in queue)                   # quầy vẫn thấy đơn
 
 
-def test_cannot_switch_after_paid_or_started(client, monkeypatch):
+def test_cannot_switch_after_paid(client, monkeypatch):
     monkeypatch.setattr(payment_client, "is_paid", lambda oid: False)
     oid = paid_momo_order(client)  # MoMo đã trả -> CONFIRMED
     assert change_method(client, oid, "CASH").status_code == 409
-
-    oid = client.post("/api/orders", json=BODY, headers=auth(10, "CUSTOMER")).json()["id"]
-    client.patch(f"/api/orders/{oid}/status", json={"status": "PREPARING"}, headers=auth(20, "STAFF", 1))
-    assert change_method(client, oid, "MOMO").status_code == 409
 
     # MoMo vừa báo đã trả nhưng đơn chưa kịp cập nhật
     monkeypatch.setattr(payment_client, "is_paid", lambda oid: True)

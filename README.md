@@ -192,6 +192,7 @@ bash scripts/check-db-isolation.sh
 4. **Admin:** đăng nhập tài khoản admin, web mở **Quản trị** (`/admin`) gồm: Tổng quan (doanh thu, số đơn, đánh giá theo cửa hàng), Đơn hàng (xem và xử lý đơn mọi cửa hàng), Cửa hàng, Thực đơn (danh mục và món), Nhân viên (tạo, khóa tài khoản), Mã giảm giá, Đánh giá.
 5. **Đánh giá:** khi đơn `COMPLETED`, khách mở lại đơn sẽ thấy ô chấm sao. Đánh giá 1–2 sao bắt buộc ghi lý do.
 6. **Hủy đơn:** khách hủy được khi đơn ở "Chờ thanh toán" hoặc "Đã xác nhận". Đơn MoMo đã trả tiền sẽ được **hoàn tiền về ví trước rồi mới hủy**. Nếu MoMo chưa hoàn được thì đơn giữ nguyên.
+7. **Đổi phương thức thanh toán:** chỉ đơn MoMo **chưa trả tiền** đổi được sang trả tại quầy (đơn vào hàng đợi ngay). Đơn trả tại quầy đã gửi tới cửa hàng nên không đổi sang MoMo được, để đơn không bị rút khỏi màn hình quầy khi bếp sắp làm; muốn trả online thì hủy (khi bếp chưa làm) và đặt lại. MoMo đã trả là chốt.
 
 ---
 

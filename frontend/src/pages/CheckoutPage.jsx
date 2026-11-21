@@ -182,7 +182,7 @@ export default function CheckoutPage() {
             />
             <span>
               <strong>Trả tại quầy</strong>
-              <small>Thanh toán khi nhận món, nhân viên sẽ thu tiền</small>
+              <small>Đơn gửi ngay tới cửa hàng, trả tiền mặt khi nhận món. Sau khi đặt không đổi sang MoMo được</small>
             </span>
           </label>
         </fieldset>
