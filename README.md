@@ -16,6 +16,7 @@ Khách chọn cửa hàng, đặt món và thanh toán online (MoMo) hoặc tr�
 7. [Chạy test](#7-chạy-test)
 8. [Xử lý lỗi thường gặp](#8-xử-lý-lỗi-thường-gặp)
 9. [Cấu trúc thư mục](#9-cấu-trúc-thư-mục)
+10. [Câu hỏi vấn đáp thường gặp](#10-câu-hỏi-vấn-đáp-thường-gặp)
 
 ---
 
@@ -170,9 +171,15 @@ bash scripts/check-db-isolation.sh
 | **Web** | http://localhost:8080 |
 | Swagger từng service | http://localhost:8001/docs … http://localhost:8005/docs |
 | Prometheus | http://localhost:9090 |
-| Grafana | http://localhost:3000 (`admin` / `admin`) |
+| Grafana | http://localhost:3000 (`admin` / `admin`) → **Dashboards** → *Drive-Thru Microservices & Business Monitoring* |
 
-**Tài khoản mẫu:** `auth-service` tự tạo sẵn 1 admin, 3 nhân viên (`staff1` Quận 7, `staff2` Thủ Đức, `staff3` Bình Thạnh) và 1 khách hàng khi khởi động. Email và mật khẩu xem trong [HUONG_DAN_PHAN_CUA_TAN.md](HUONG_DAN_PHAN_CUA_TAN.md) hoặc hàm `seed_default_accounts` trong [auth-service/main.py](auth-service/main.py). Có thể bấm **Đăng ký** để tạo khách mới.
+**Tài khoản mẫu** (`auth-service` tự tạo khi khởi động, mật khẩu đều là `Password123`; có thể bấm **Đăng ký** để tạo khách mới):
+
+| Vai trò | Email | Cửa hàng |
+|---|---|---|
+| Admin | `admin@drivethru.vn` | Toàn hệ thống |
+| Nhân viên | `staff1@drivethru.vn` / `staff2@…` / `staff3@…` | 1 Quận 7 / 2 Thủ Đức / 3 Bình Thạnh |
+| Khách hàng | `khachhang@drivethru.vn` | — |
 
 **Kịch bản nên thử:**
 1. **Trả tại quầy:** đăng nhập khách → chọn cửa hàng → thêm món → đặt đơn, chọn "Trả tại quầy" → xem tiến trình đơn.
@@ -319,6 +326,21 @@ SOA_FinalReport_DriveThru/
 ├── docs/                    # Use Case, ERD, sơ đồ kiến trúc, máy trạng thái đơn
 ├── init-dbs.sh              # Tạo 5 database + 5 tài khoản riêng khi Postgres khởi động lần đầu
 ├── docker-compose.yml       # Chạy toàn bộ hệ thống
-├── .env.example             # Mẫu biến môi trường
-└── HUONG_DAN_PHAN_CUA_TAN.md  # Chi tiết phần auth, feedback, giám sát
+└── .env.example             # Mẫu biến môi trường
 ```
+
+---
+
+## 10. Câu hỏi vấn đáp thường gặp
+
+**Các service biết người dùng là ai mà không cần hỏi lại auth-service?**
+`auth-service` ký JWT (HS256) chứa `sub`, `role`, `station_id`. Service khác tự kiểm tra chữ ký bằng cùng `JWT_SECRET`, nên không gọi sang auth-service mỗi request và auth-service không thành điểm nghẽn.
+
+**Không có khóa ngoại giữa các database thì giữ dữ liệu đúng bằng cách nào?**
+Các ID như `reviews.order_id` chỉ là tham chiếu logic. Trước khi ghi, service gọi API nội bộ của service sở hữu dữ liệu để kiểm tra, ví dụ feedback-service gọi `/internal/orders/{id}` (kèm `X-Internal-Key`, timeout 3 giây, retry 2 lần) để chắc đơn đã `COMPLETED` và đúng chủ. Đơn hàng lưu sẵn tên và giá món lúc đặt (snapshot) nên không phụ thuộc menu-service về sau.
+
+**Lấy gì chứng minh service này không đọc database của service khác?**
+Mỗi service có tài khoản PostgreSQL riêng. `docker exec -it drivethru_postgres psql -U order_user -d payment_db` bị từ chối `permission denied`; `bash scripts/check-db-isolation.sh` in bảng đủ 5 × 5 trường hợp.
+
+**Khách chấm 1–2 sao thì sao?**
+Bắt buộc ghi lý do (thiếu thì trả `422`). Metric `negative_reviews_total` tăng theo từng cửa hàng và hiện ở Grafana, admin xem chi tiết ở tab Đánh giá.
