@@ -114,7 +114,8 @@ async def lifespan(app: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
         drop_removed_columns()
-        seed_sample_reviews()
+        if os.getenv("SEED_DATA", "true").lower() == "true":
+            seed_sample_reviews()
         logger.info(">>> Đã kết nối feedback_db và kiểm tra bảng 'reviews' thành công!")
     except Exception as e:
         logger.error(f"Lỗi kết nối feedback_db: {e}")

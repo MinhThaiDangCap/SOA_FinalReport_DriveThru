@@ -15,7 +15,7 @@ services:
       PAYMENT_DB_PASSWORD: ${PAYMENT_DB_PASSWORD:-payment_secret}
       FEEDBACK_DB_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_secret}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
@@ -50,6 +50,7 @@ services:
     container_name: drivethru_feedback
     restart: always
     environment:
+      SEED_DATA: "false"
       POSTGRES_USER: feedback_user
       POSTGRES_PASSWORD: ${FEEDBACK_DB_PASSWORD:-feedback_secret}
       POSTGRES_HOST: postgres
