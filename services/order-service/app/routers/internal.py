@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import OrderStatus, OrderStatusHistory
-from app.routers.orders import get_order_or_404, update_estimate
+from app.estimate import lock_station
+from app.routers.orders import ORDERS_CREATED, get_order_or_404, refresh_kitchen
 from app.schemas import InternalOrderOut, PaymentConfirmIn
 from app.security import verify_internal_key
 from app.state_machine import change_status
@@ -25,37 +28,48 @@ def internal_get_order(order_id: int, db: Session = Depends(get_db)):
 def payment_confirmed(
     order_id: int, payload: PaymentConfirmIn, db: Session = Depends(get_db)
 ):
-    """payment-service báo đã thu tiền. Gọi lại nhiều lần vẫn an toàn (idempotent)."""
+    """payment-service báo khách đã trả tiền ở trạm 1 (tiền mặt hoặc ZaloPay): đơn vào bếp.
+
+    Gọi lại nhiều lần vẫn an toàn (idempotent).
+    """
+    order = get_order_or_404(db, order_id)
+    lock_station(db, order.station_id)          # nhiều đơn vào bếp cùng lúc: xếp lần lượt
     order = get_order_or_404(db, order_id, lock=True)
 
-    if order.status == OrderStatus.PENDING_PAYMENT.value:
-        note = "Thanh toán ZaloPay thành công"
-        if payload.transaction_ref:
+    method = payload.method or order.payment_method or "ZALOPAY"
+    paid_with = "tiền mặt" if method == "CASH" else "ZaloPay"
+
+    if order.status in (OrderStatus.AWAITING_PAYMENT.value, OrderStatus.PENDING_PAYMENT.value):
+        if order.payment_method != method:
+            # Nhân viên vừa đổi sang tiền mặt nhưng khách đã kịp trả ZaloPay: ghi đúng cách
+            # trả thật sự để quầy không thu tiền lần nữa
+            order.payment_method = method
+        note = f"Đã thanh toán {paid_with}, đơn vào bếp"
+        if payload.transaction_ref and method == "ZALOPAY":
             note += f" (mã GD: {payload.transaction_ref})"
         change_status(order, OrderStatus.CONFIRMED, None, note)
-        update_estimate(db, order)  # đã trả tiền: đơn vào hàng đợi của bếp
+        order.confirmed_at = datetime.now(timezone.utc)
+        refresh_kitchen(db, order.station_id)   # xếp đơn vào hàng đợi bếp, tính giờ xong
+        ORDERS_CREATED.labels(payment_method=method).inc()
         db.commit()
         db.refresh(order)
     elif order.status == OrderStatus.CANCELLED.value:
-        # Khách đã hủy rồi mà tiền vẫn về: báo lỗi để payment-service ghi chú cho cửa hàng
-        # hoàn tiền qua hotline
-        from fastapi import HTTPException
-
+        # Đơn đã bị hủy mà tiền vẫn về: báo lỗi để payment-service ghi chú hoàn tiền
         raise HTTPException(status_code=409, detail="Đơn đã bị hủy")
-    elif order.payment_method == "CASH":
-        # Khách đã mở trang ZaloPay rồi mới đổi sang trả tại quầy, sau đó vẫn trả xong:
-        # tiền đã vào, ghi lại là ZaloPay để quầy không thu tiền mặt lần nữa
-        order.payment_method = "ZALOPAY"
+    elif order.status == OrderStatus.HOLD.value:
+        raise HTTPException(status_code=409, detail="Đơn chưa được trạm 1 nhận, chưa thu tiền")
+    elif payload.method and order.payment_method != payload.method:
+        order.payment_method = payload.method
         order.history.append(
             OrderStatusHistory(
                 from_status=order.status,
                 to_status=order.status,
                 changed_by=None,
-                note="Khách đã thanh toán ZaloPay, không cần thu tiền mặt",
+                note=f"Khách đã thanh toán {paid_with}, không cần thu tiền lần nữa",
             )
         )
         db.commit()
         db.refresh(order)
-    # Các trạng thái khác: đã CONFIRMED hoặc xa hơn, không làm gì, trả 200
+    # Các trạng thái khác: đã vào bếp rồi, không làm gì, trả 200
 
     return order

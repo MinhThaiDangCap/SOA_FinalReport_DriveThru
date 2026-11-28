@@ -27,12 +27,12 @@ const HIGHLIGHTS = [
   {
     icon: 'car',
     title: 'Nhận diện qua biển số xe',
-    text: 'Chỉ cần bấm "Tôi đã đến", nhân viên mang món ra đúng làn xe trong tích tắc.',
+    text: 'Đọc mã nhận món ở trạm 1 và trạm 2, nhân viên đối chiếu biển số để giao đúng xe.',
   },
   {
     icon: 'card',
     title: 'Thanh toán linh hoạt',
-    text: 'Hỗ trợ thanh toán trực tuyến qua ZaloPay hoặc trả tiền mặt tại quầy.',
+    text: 'Đặt trước không cần trả tiền; tới trạm 1 trả bằng ZaloPay hoặc tiền mặt.',
   },
 ]
 

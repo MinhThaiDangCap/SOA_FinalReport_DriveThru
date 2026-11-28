@@ -1,21 +1,36 @@
 import { useEffect, useState } from 'react'
 
 import { getStations } from '../api/menu.js'
-import AvailabilityPanel from '../components/AvailabilityPanel.jsx'
-import OrderBoard from '../components/OrderBoard.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
+import StationOne from '../components/StationOne.jsx'
+import StationTwo from '../components/StationTwo.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 
 const TABS = [
-  { key: 'orders', label: 'Đơn hàng' },
-  { key: 'menu', label: 'Món hôm nay' },
+  { key: 'station1', label: 'Trạm 1 · Xác nhận & thanh toán' },
+  { key: 'station2', label: 'Trạm 2 · Giao món' },
   { key: 'reviews', label: 'Đánh giá' },
 ]
 
-/** Màn hình quầy của nhân viên: chỉ thấy cửa hàng mình được gán. */
+/** Màn hình nhân viên trạm (cùng vai trò STAFF, chọn trạm đang đứng). Chỉ thấy chi nhánh mình. */
 export default function StaffPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState('orders')
+  const [tab, setTab] = useState(() => {
+    try {
+      return localStorage.getItem('golane_staff_tab') || 'station1'
+    } catch {
+      return 'station1'
+    }
+  })
+
+  function pick(key) {
+    setTab(key)
+    try {
+      localStorage.setItem('golane_staff_tab', key)
+    } catch {
+      /* không lưu được thì thôi */
+    }
+  }
   const [stationName, setStationName] = useState('')
   const stationId = user?.station_id
 
@@ -38,11 +53,11 @@ export default function StaffPage() {
     <div className="dash">
       <header className="dash-head">
         <div>
-          <p className="dash-eyebrow">Màn hình quầy · Ca trực: {user?.full_name}</p>
+          <p className="dash-eyebrow">Nhân viên trạm · Ca trực: {user?.full_name}</p>
           <h1>{stationName || `Cửa hàng #${stationId}`}</h1>
         </div>
         <div className="dash-live-pill">
-          <span className="live-dot" /> Đang nhận đơn trực tiếp (5s)
+          <span className="live-dot" /> Tự cập nhật mỗi 5 giây
         </div>
       </header>
 
@@ -52,15 +67,15 @@ export default function StaffPage() {
             key={t.key}
             type="button"
             className={tab === t.key ? 'tab active' : 'tab'}
-            onClick={() => setTab(t.key)}
+            onClick={() => pick(t.key)}
           >
             {t.label}
           </button>
         ))}
       </nav>
 
-      {tab === 'orders' && <OrderBoard stationId={stationId} />}
-      {tab === 'menu' && <AvailabilityPanel stationId={stationId} />}
+      {tab === 'station1' && <StationOne />}
+      {tab === 'station2' && <StationTwo />}
       {tab === 'reviews' && <ReviewsPanel stationId={stationId} />}
     </div>
   )

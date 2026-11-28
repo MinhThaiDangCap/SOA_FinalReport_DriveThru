@@ -62,7 +62,12 @@ export default function OrdersPage() {
           <li key={o.id}>
             <Link to={`/orders/${o.id}`} className="order-card">
               <div className="order-card-head">
-                <strong>Đơn #{o.id}</strong>
+                <strong>
+                  Đơn #{o.id}
+                  {o.pickup_code && !['COMPLETED', 'CANCELLED'].includes(o.status) && (
+                    <span className="order-card-code"> · Mã {o.pickup_code}</span>
+                  )}
+                </strong>
                 <span className={`status-pill status-${o.status.toLowerCase()}`}>
                   {STATUS_LABEL[o.status] || o.status}
                 </span>

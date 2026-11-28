@@ -31,10 +31,13 @@ def get_order(order_id: int) -> tuple[int, dict]:
     return resp.status_code, resp.json()
 
 
-def mark_paid(order_id: int, transaction_ref: str | None) -> tuple[int, dict]:
+def mark_paid(
+    order_id: int, transaction_ref: str | None, method: str | None = None
+) -> tuple[int, dict]:
+    """Báo order-service khách đã trả tiền (method: CASH | ZALOPAY): đơn vào bếp."""
     resp = _request(
         "POST",
         f"/internal/orders/{order_id}/payment-confirmed",
-        json={"transaction_ref": transaction_ref},
+        json={"transaction_ref": transaction_ref, "method": method},
     )
     return resp.status_code, resp.json()

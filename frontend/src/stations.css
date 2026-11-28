@@ -1,0 +1,299 @@
+/* ===== Mô hình 2 trạm: mã nhận món, trạm 1, bếp, trạm 2, phiếu in ===== */
+
+/* Trang đơn của khách: mã nhận món thật to */
+.pickup-code-box {
+  margin: 4px 0 14px;
+  padding: 16px;
+  border: 2px dashed var(--brand);
+  border-radius: var(--radius);
+  background: var(--brand-soft);
+  text-align: center;
+}
+.pickup-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-dark);
+}
+.pickup-code {
+  display: block;
+  font-size: 56px;
+  line-height: 1.1;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+}
+.pickup-code-box p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.pickup-code-box .pickup-late {
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+.pickup-ready {
+  border-style: solid;
+  border-color: #2f8a4e;
+  background: #e3f4e8;
+}
+.pickup-ready .pickup-label {
+  color: #1d6b3a;
+}
+.order-card-code {
+  color: var(--brand-dark);
+}
+
+/* Trang đặt đơn */
+.arrival-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.arrival-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+.arrival-chip input {
+  margin: 0;
+}
+.arrival-chip.on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+.hold-notice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid #bcd6f2;
+  border-radius: 12px;
+  background: #e8f1fc;
+  color: #1f4f85;
+}
+.hold-notice p {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Trạm 1 / Trạm 2: ô tìm mã */
+.station-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.station-search input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font: inherit;
+  font-size: 20px;
+  letter-spacing: 0.06em;
+}
+.station-tip {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.ticket-overdue {
+  border-color: var(--brand);
+  background: #fff4f2;
+}
+.ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.ticket-actions-minor {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+.pickup-chip {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.auto-print {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 14px;
+}
+
+/* Trạm 2: thẻ to, chạm để giao */
+.ready-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ready-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  border: 2px solid #2f8a4e;
+  border-radius: var(--radius);
+  background: #f3fbf5;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ready-card:hover {
+  background: #e3f4e8;
+}
+.pickup-code-sm {
+  font-size: 36px;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Trạng thái mới */
+.status-hold,
+.status-awaiting_payment {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+/* Phiếu bếp khổ 80mm */
+.print-ticket {
+  width: 72mm;
+  margin: 16px auto;
+  padding: 4mm;
+  background: #fff;
+  color: #000;
+  /* Font không chân có đủ dấu tiếng Việt (font monospace hay lệch dấu khi in) */
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.print-ticket hr {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 6px 0;
+}
+.pt-brand,
+.pt-station,
+.pt-code-label,
+.pt-code,
+.pt-plate,
+.pt-foot {
+  text-align: center;
+}
+.pt-brand {
+  font-weight: 700;
+}
+.pt-code-label {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+.pt-code {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  line-height: 1.1;
+}
+.pt-plate {
+  font-size: 18px;
+  font-weight: 700;
+}
+.pt-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pt-items li {
+  padding: 2px 0;
+}
+.pt-row {
+  display: flex;
+  justify-content: space-between;
+}
+.pt-foot {
+  margin: 8px 0 0;
+  font-size: 11px;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  body {
+    background: #fff;
+  }
+  .topbar,
+  .site-footer,
+  .no-print {
+    display: none !important;
+  }
+  .page {
+    padding: 0;
+    margin: 0;
+  }
+  .print-ticket {
+    margin: 0;
+  }
+}
+
+/* Thanh menu không tràn ngang: màn hình hẹp ẩn các mục giới thiệu (vẫn có ở trang chủ) */
+@media (max-width: 1100px) {
+  .topbar-link-extra {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  .topbar-inner {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .topbar-nav {
+    width: 100%;
+    gap: 6px;
+  }
+  .user-chip {
+    margin-left: auto;
+    padding-left: 8px;
+  }
+  .topbar-user {
+    max-width: 110px;
+  }
+  .dash-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .dash-tabs .tab {
+    flex: 0 0 auto;
+  }
+}

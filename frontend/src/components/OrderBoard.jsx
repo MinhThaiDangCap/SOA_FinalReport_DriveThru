@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { errorMessage } from '../api/client.js'
-import { confirmCash, getQueue, getRecentOrders, updateOrderStatus } from '../api/staff.js'
+import { getQueue, getRecentOrders, updateOrderStatus } from '../api/staff.js'
 import { formatDateTime, formatDuration, formatPrice, formatTime, METHOD_LABEL, minutesUntil, STATUS_LABEL } from '../format.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import Icon from './Icon.jsx'
@@ -10,10 +10,11 @@ import NotificationBell from './NotificationBell.jsx'
 
 const POLL_MS = 5000
 
+// Bảng tổng quan của admin theo mô hình 2 trạm
 const COLUMNS = [
-  { key: 'new', title: 'Đơn mới', statuses: ['CONFIRMED'] },
-  { key: 'cooking', title: 'Đang làm', statuses: ['PREPARING'] },
-  { key: 'pickup', title: 'Chờ giao', statuses: ['READY', 'ARRIVED'] },
+  { key: 'station1', title: 'Trạm 1 · chờ xác nhận / thanh toán', statuses: ['HOLD', 'AWAITING_PAYMENT', 'PENDING_PAYMENT'] },
+  { key: 'kitchen', title: 'Bếp · đã trả tiền / đang làm', statuses: ['CONFIRMED', 'PREPARING'] },
+  { key: 'station2', title: 'Trạm 2 · chờ giao', statuses: ['READY', 'ARRIVED'] },
 ]
 
 function minutesSince(iso) {
@@ -22,9 +23,9 @@ function minutesSince(iso) {
   return Math.max(0, Math.floor((Date.now() - t) / 60000))
 }
 
-/** Xe đã tới quầy chưa (đơn mới dùng arrived_at, đơn cũ dùng status ARRIVED). */
+/** Xe đã tới trạm 1 chưa (trạm 1 đã nhận đơn; đơn cũ dùng arrived_at / ARRIVED). */
 export function hasArrived(order) {
-  return !!order.arrived_at || order.status === 'ARRIVED'
+  return !!order.checked_in_at || !!order.arrived_at || order.status === 'ARRIVED'
 }
 
 // Trong mỗi cột: xe đã tới lên đầu (tới trước đứng trước), rồi tới đơn đặt trước
@@ -37,7 +38,8 @@ function byPriority(a, b) {
   return ta - tb
 }
 
-/** Hành động kế tiếp của một đơn: mỗi thẻ chỉ có đúng một nút chính. */
+/** Hành động kế tiếp admin bấm hộ được: bếp (bắt đầu / xong) và trạm 2 (giao).
+ * Bước trạm 1 (đọc mã, thu tiền) làm ở màn hình nhân viên trạm 1. */
 function nextAction(order) {
   switch (order.status) {
     case 'CONFIRMED':
@@ -46,20 +48,7 @@ function nextAction(order) {
       return { label: 'Món đã xong', run: () => updateOrderStatus(order.id, 'READY') }
     case 'READY':
     case 'ARRIVED':
-      if (order.payment_method === 'CASH') {
-        return {
-          label: `${hasArrived(order) ? 'Giao ngay · ' : ''}Thu ${formatPrice(order.total_amount)}`,
-          cash: true,
-          run: async () => {
-            await confirmCash(order.id)
-            return updateOrderStatus(order.id, 'COMPLETED', 'Đã thu tiền mặt và giao món')
-          },
-        }
-      }
-      return {
-        label: hasArrived(order) ? 'Giao ngay' : 'Đã giao món',
-        run: () => updateOrderStatus(order.id, 'COMPLETED'),
-      }
+      return { label: 'Đã giao', run: () => updateOrderStatus(order.id, 'COMPLETED') }
     default:
       return null
   }
@@ -69,7 +58,7 @@ function nextAction(order) {
 const NOTES = [50000, 100000, 200000, 500000]
 
 /** Hộp xác nhận thu tiền mặt: xem lại đơn, nhập tiền khách đưa để tính tiền thối. */
-function CashDialog({ order, busy, onConfirm, onCancel }) {
+export function CashDialog({ order, busy, onConfirm, onCancel, confirmLabel }) {
   const total = order.total_amount
   const [given, setGiven] = useState('')
   const givenNum = Number(given.replace(/\D/g, '')) || 0
@@ -79,7 +68,7 @@ function CashDialog({ order, busy, onConfirm, onCancel }) {
   return (
     <ConfirmDialog
       title="Xác nhận thu tiền mặt"
-      confirmLabel={`Đã thu ${formatPrice(total)} · giao món`}
+      confirmLabel={confirmLabel || `Đã thu ${formatPrice(total)}`}
       confirmDisabled={short}
       tone="success"
       busy={busy}
@@ -92,8 +81,8 @@ function CashDialog({ order, busy, onConfirm, onCancel }) {
           <LicensePlate value={order.license_plate} size="lg" />
         </div>
         <div>
-          <span className="muted">Đơn</span>
-          <strong>#{order.id}</strong>
+          <span className="muted">{order.pickup_code ? 'Mã' : 'Đơn'}</span>
+          <strong>{order.pickup_code || `#${order.id}`}</strong>
         </div>
       </div>
       <ul className="cash-items">
@@ -163,11 +152,13 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
       )}
       <div className="ticket-head">
         <LicensePlate value={order.license_plate} size="md" />
-        <span className="ticket-id">#{order.id}</span>
+        <span className="ticket-id">
+          {order.pickup_code ? `Mã ${order.pickup_code}` : `#${order.id}`}
+        </span>
       </div>
       {arrived && (
         <div className="ticket-flag">
-          <Icon name="car" size={18} /> Xe đã tới
+          <Icon name="car" size={18} /> Xe đã tới trạm 1
           {carWait !== null && ` · chờ ${formatDuration(carWait)}`}
           {order.status === 'PREPARING' && ' · làm nhanh'}
         </div>
@@ -180,7 +171,7 @@ function Ticket({ order, stationName, flash, busy, onAction }) {
         ))}
       </ul>
       <div className="ticket-meta">
-        {METHOD_LABEL[order.payment_method] || order.payment_method} · {formatPrice(order.total_amount)}
+        {order.payment_method ? METHOD_LABEL[order.payment_method] : STATUS_LABEL[order.status]} · {formatPrice(order.total_amount)}
         {' · '}
         <span className={`with-icon${waited >= 15 ? ' ticket-late' : ''}`}>
           <Icon name="clock" size={14} /> chờ {formatDuration(waited)}

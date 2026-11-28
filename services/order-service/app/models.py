@@ -1,34 +1,64 @@
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
 
 class OrderStatus(str, enum.Enum):
-    PENDING_PAYMENT = "PENDING_PAYMENT"
+    # Luồng 2 trạm:
+    # HOLD (đặt trên web, có mã, chưa trả tiền, bếp chưa thấy)
+    # -> AWAITING_PAYMENT (trạm 1 đã nhận đơn, khách đang trả tiền mặt / ZaloPay)
+    # -> CONFIRMED (đã trả tiền, vào hàng đợi bếp) -> PREPARING -> READY (mời ra trạm 2)
+    # -> COMPLETED (trạm 2 đã giao). Đơn chưa trả tiền có thể CANCELLED.
+    HOLD = "HOLD"
+    AWAITING_PAYMENT = "AWAITING_PAYMENT"
     CONFIRMED = "CONFIRMED"
     PREPARING = "PREPARING"
     READY = "READY"
-    # Không còn dùng cho đơn mới (khách đến giờ là cờ arrived_at), giữ lại cho đơn cũ
-    ARRIVED = "ARRIVED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+    # Hai trạng thái của cách làm cũ (trả ZaloPay ngay khi đặt, khách báo "đã đến"),
+    # giữ lại để đọc được đơn cũ trong database
+    PENDING_PAYMENT = "PENDING_PAYMENT"
+    ARRIVED = "ARRIVED"
 
 
 class Order(Base):
     __tablename__ = "orders"
+    # Mã nhận món không trùng trong ngày tại cùng chi nhánh
+    __table_args__ = (
+        UniqueConstraint("station_id", "pickup_date", "pickup_code", name="uq_orders_pickup"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     customer_id: Mapped[int] = mapped_column(index=True)  # users.id bên auth_db
     station_id: Mapped[int] = mapped_column(index=True)   # stations.id bên menu_db
     license_plate: Mapped[str] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(
-        String(20), default=OrderStatus.PENDING_PAYMENT.value, index=True
+        String(20), default=OrderStatus.HOLD.value, index=True
     )
-    payment_method: Mapped[str] = mapped_column(String(10))  # ZALOPAY | CASH
+    # ZALOPAY | CASH, khách chọn khi đã tới trạm 1 (đơn đang treo thì chưa có)
+    payment_method: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Mã 4 số khách đọc ở trạm 1 và trạm 2
+    pickup_code: Mapped[str | None] = mapped_column(String(4), nullable=True, index=True)
+    pickup_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # ngày theo giờ VN
+    contact_phone: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    # Khách hẹn tới trạm 1 lúc nào; quá hold_expires_at thì nhân viên được hủy đơn
+    expected_arrival_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    hold_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    checked_in_at: Mapped[datetime | None] = mapped_column(  # trạm 1 nhận đơn
+        DateTime(timezone=True), nullable=True
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(   # đã trả tiền, vào bếp
+        DateTime(timezone=True), nullable=True
+    )
     subtotal: Mapped[int] = mapped_column(default=0)          # VND, số nguyên
     discount_amount: Mapped[int] = mapped_column(default=0)
     total_amount: Mapped[int] = mapped_column(default=0)
@@ -39,7 +69,7 @@ class Order(Base):
     estimated_ready_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # Lúc khách bấm "Tôi đã đến". Tách khỏi status: xe tới sớm không làm đổi tiến độ bếp.
+    # Cách làm cũ: lúc khách bấm "Tôi đã đến" (đơn mới không dùng)
     arrived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -58,6 +88,16 @@ class Order(Base):
         cascade="all, delete-orphan",
         order_by="OrderStatusHistory.id",
     )
+
+    @property
+    def is_overdue(self) -> bool:
+        """Đơn đang treo đã quá hạn giữ: trạm 1 tô đỏ, nhân viên được hủy (không tự hủy)."""
+        if self.status != OrderStatus.HOLD.value or self.hold_expires_at is None:
+            return False
+        exp = self.hold_expires_at
+        if exp.tzinfo is None:  # SQLite trả datetime không có múi giờ
+            exp = exp.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) > exp
 
 
 class OrderItem(Base):

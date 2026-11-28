@@ -19,6 +19,18 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE orders ADD COLUMN IF NOT EXISTS prep_minutes INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_ready_at TIMESTAMPTZ",
             "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS prep_minutes INTEGER NOT NULL DEFAULT 3",
+            # Mô hình 2 trạm: đặt trước có mã, trả tiền ở trạm 1
+            "ALTER TABLE orders ALTER COLUMN payment_method DROP NOT NULL",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_code VARCHAR(4)",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_date DATE",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(15)",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS expected_arrival_at TIMESTAMPTZ",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS hold_expires_at TIMESTAMPTZ",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_orders_pickup "
+            "ON orders (station_id, pickup_date, pickup_code)",
+            "CREATE INDEX IF NOT EXISTS ix_orders_pickup_code ON orders (pickup_code)",
         ):
             conn.execute(text(sql))
     yield

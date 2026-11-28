@@ -46,8 +46,9 @@ def ctx(monkeypatch):
         calls["zalopay"].append((url, data))
         return FakeResp(calls[url.rsplit("/", 1)[-1]])
 
-    def fake_mark_paid(order_id, ref):
+    def fake_mark_paid(order_id, ref, method=None):
         calls["paid"].append((order_id, ref))
+        calls.setdefault("paid_method", []).append(method)
         return 200, {}
 
     monkeypatch.setattr(zalopay.httpx, "post", fake_post)
@@ -59,8 +60,10 @@ def ctx(monkeypatch):
     app.dependency_overrides.clear()
 
 
-def auth(uid=1, role="CUSTOMER"):
+def auth(uid=1, role="CUSTOMER", station=None):
     p = {"sub": str(uid), "role": role, "exp": int(time.time()) + 3600}
+    if station:
+        p["station_id"] = station
     return {"Authorization": "Bearer " + jwt.encode(p, "test", algorithm="HS256")}
 
 
@@ -241,3 +244,28 @@ def test_cash_confirm_is_idempotent(ctx, monkeypatch):
     again = client.post("/api/payments/cash/confirm", json={"order_id": 7}, headers=staff)
     assert first.status_code == again.status_code == 200
     assert first.json()["id"] == again.json()["id"] and first.json()["method"] == "CASH"
+
+
+def test_cash_at_station1_sends_order_to_kitchen(ctx, monkeypatch):
+    client, calls = ctx
+    monkeypatch.setattr(order_client, "get_order",
+                        lambda oid: (200, dict(ORDER, payment_method="CASH", status="AWAITING_PAYMENT")))
+    other = client.post("/api/payments/cash/confirm", json={"order_id": 7},
+                        headers=auth(uid=21, role="STAFF", station=2))
+    assert other.status_code == 403                          # nhân viên chi nhánh khác
+    r = client.post("/api/payments/cash/confirm", json={"order_id": 7},
+                    headers=auth(uid=20, role="STAFF", station=1))
+    assert r.status_code == 200 and r.json()["status"] == "SUCCESS"
+    assert calls["paid"] == [(7, "CASH7")] and calls["paid_method"] == ["CASH"]
+
+
+def test_cannot_pay_before_station1(ctx, monkeypatch):
+    """Đơn đang treo (chưa tới trạm 1): chưa tạo được giao dịch ZaloPay, chưa thu tiền mặt."""
+    client, _ = ctx
+    monkeypatch.setattr(order_client, "get_order", lambda oid: (200, dict(ORDER, status="HOLD")))
+    r = client.post("/api/payments/zalopay/create", json={"order_id": 7}, headers=auth())
+    assert r.status_code == 409 and "trạm 1" in r.json()["detail"]
+    monkeypatch.setattr(order_client, "get_order",
+                        lambda oid: (200, dict(ORDER, payment_method="CASH", status="HOLD")))
+    r = client.post("/api/payments/cash/confirm", json={"order_id": 7}, headers=auth(uid=20, role="ADMIN"))
+    assert r.status_code == 409

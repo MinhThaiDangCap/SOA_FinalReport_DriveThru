@@ -5,17 +5,19 @@ from app.models import Order, OrderStatus, OrderStatusHistory
 
 S = OrderStatus
 
-# Bảng chuyển trạng thái hợp lệ: từ trạng thái nào được sang trạng thái nào
-# Status chỉ phản ánh tiến độ bếp. Khách tới quầy là cờ riêng (Order.arrived_at),
-# nên món phải qua READY rồi mới giao được, dù xe đã tới từ lúc đang làm.
+# Bảng chuyển trạng thái hợp lệ: từ trạng thái nào được sang trạng thái nào.
+# Chỉ hủy được khi khách CHƯA trả tiền (bếp chưa làm gì), nên không bao giờ phải hoàn tiền.
 ALLOWED: dict[OrderStatus, set[OrderStatus]] = {
-    S.PENDING_PAYMENT: {S.CONFIRMED, S.CANCELLED},
-    S.CONFIRMED: {S.PREPARING, S.CANCELLED},
-    S.PREPARING: {S.READY},
-    S.READY: {S.COMPLETED},
-    S.ARRIVED: {S.READY, S.COMPLETED},  # chỉ còn cho đơn cũ trước khi đổi cách làm
+    S.HOLD: {S.AWAITING_PAYMENT, S.CANCELLED},           # trạm 1 nhận đơn / hủy
+    S.AWAITING_PAYMENT: {S.CONFIRMED, S.CANCELLED},      # đã trả tiền -> vào bếp
+    S.CONFIRMED: {S.PREPARING},                          # bếp bắt đầu làm
+    S.PREPARING: {S.READY},                              # bếp làm xong, dán phiếu
+    S.READY: {S.COMPLETED},                              # trạm 2 giao món
     S.COMPLETED: set(),
     S.CANCELLED: set(),
+    # Đơn cũ của cách làm trước
+    S.PENDING_PAYMENT: {S.CONFIRMED, S.CANCELLED},
+    S.ARRIVED: {S.READY, S.COMPLETED},
 }
 
 STATUS_CHANGES = Counter(

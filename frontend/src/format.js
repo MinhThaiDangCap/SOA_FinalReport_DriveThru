@@ -6,42 +6,44 @@ export const formatPrice = (amount) => `${vnd.format(amount)} ₫`
 
 /** Tên hiển thị của trạng thái đơn */
 export const STATUS_LABEL = {
-  PENDING_PAYMENT: 'Chờ thanh toán',
-  CONFIRMED: 'Đã xác nhận',
-  PREPARING: 'Đang chuẩn bị',
-  READY: 'Sẵn sàng nhận',
-  ARRIVED: 'Khách đã đến',
+  HOLD: 'Đang giữ chỗ',
+  AWAITING_PAYMENT: 'Chờ thanh toán ở trạm 1',
+  CONFIRMED: 'Đã thanh toán, chờ bếp',
+  PREPARING: 'Bếp đang làm',
+  READY: 'Mời ra trạm 2',
   COMPLETED: 'Hoàn thành',
   CANCELLED: 'Đã hủy',
+  // Đơn cũ của cách làm trước
+  PENDING_PAYMENT: 'Chờ thanh toán',
+  ARRIVED: 'Khách đã đến',
 }
 
+/** Khách chọn sẽ tới trạm 1 trong bao nhiêu phút (đơn được giữ thêm 10 phút). */
+export const ARRIVAL_CHOICES = [15, 30, 45]
+export const HOLD_GRACE_MINUTES = 10
+
 /**
- * Các phương thức thanh toán khách chọn được. Thêm phương thức mới: thêm 1 dòng ở đây
- * (và cho order-service chấp nhận giá trị đó). online = trả trước qua cổng thanh toán.
+ * Cách trả tiền khách chọn KHI ĐÃ TỚI TRẠM 1 (đặt trên web thì chưa trả).
+ * Thêm phương thức mới: thêm 1 dòng ở đây (và cho order-service chấp nhận giá trị đó).
  */
 export const PAYMENT_METHODS = [
   {
-    value: 'ZALOPAY',
-    icon: 'wallet',
-    title: 'Thanh toán online (ZaloPay)',
-    note: 'Quét QR bằng app ZaloPay hoặc trả bằng thẻ ATM / thẻ quốc tế.',
-    // Ghi chú thêm ở bước đặt đơn
-    checkoutNote: 'Đã thanh toán thì không hủy trên ứng dụng, cần hủy vui lòng gọi hotline 1900 6868.',
-    online: true,
-  },
-  {
     value: 'CASH',
     icon: 'cash',
-    title: 'Trả tại quầy',
-    note: 'Đơn gửi ngay tới cửa hàng, trả tiền mặt khi nhận món.',
-    checkoutNote: 'Sau khi đặt không đổi sang trả online được.',
-    online: false,
+    title: 'Tiền mặt',
+    note: 'Nhân viên trạm 1 thu tiền rồi đưa đơn vào bếp.',
+  },
+  {
+    value: 'ZALOPAY',
+    icon: 'wallet',
+    title: 'ZaloPay',
+    note: 'Khách trả trên điện thoại của mình (QR, thẻ ATM, thẻ quốc tế), đơn tự vào bếp.',
   },
 ]
 
 export const METHOD_LABEL = {
   ZALOPAY: 'ZaloPay',
-  CASH: 'Trả tại quầy',
+  CASH: 'Tiền mặt',
 }
 
 

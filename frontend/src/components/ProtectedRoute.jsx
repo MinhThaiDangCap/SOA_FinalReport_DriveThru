@@ -2,9 +2,9 @@ import { Navigate, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext.jsx'
 
-/** Trang chính của từng vai trò: nhân viên ở màn hình quầy, admin ở trang quản trị. */
+/** Trang chính của từng vai trò: nhân viên trạm, bếp, admin ở trang quản trị. */
 export function homePath(role) {
-  return { STAFF: '/staff', ADMIN: '/admin' }[role] || '/'
+  return { STAFF: '/staff', KITCHEN: '/kitchen', ADMIN: '/admin' }[role] || '/'
 }
 
 /**

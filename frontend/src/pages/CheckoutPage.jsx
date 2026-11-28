@@ -4,9 +4,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { errorMessage } from '../api/client.js'
 import { createOrder, getAvailableCoupons } from '../api/orders.js'
 import Icon from '../components/Icon.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
-import { formatPrice, PAYMENT_METHODS } from '../format.js'
-import { payForOrder } from '../payment.js'
+import { ARRIVAL_CHOICES, formatPrice, HOLD_GRACE_MINUTES } from '../format.js'
 
 /** "Giảm 10% (-8.700 ₫)" / "Giảm 20.000 ₫" (giỏ nhỏ hơn mức giảm: "Giảm 15.000 ₫") */
 function couponLabel(c) {
@@ -34,7 +34,17 @@ export function validatePlate(value) {
   return ''
 }
 
+const PHONE_RE = /^0\d{9}$/
+
+export function validatePhone(value) {
+  const v = value.replace(/[\s.]/g, '')
+  if (!v) return 'Vui lòng nhập số điện thoại để cửa hàng liên hệ khi cần.'
+  if (!PHONE_RE.test(v)) return 'Số điện thoại gồm 10 số, bắt đầu bằng 0.'
+  return ''
+}
+
 export default function CheckoutPage() {
+  const { user } = useAuth()
   const { cart, subtotal, clear } = useCart()
   const navigate = useNavigate()
   const plateRef = useRef(null)
@@ -43,7 +53,9 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState('')
   const [coupons, setCoupons] = useState([])
   const [couponsState, setCouponsState] = useState('loading') // loading | ready | error
-  const [method, setMethod] = useState('ZALOPAY')
+  const [phone, setPhone] = useState(user?.phone || '')
+  const [phoneTouched, setPhoneTouched] = useState(false)
+  const [arrival, setArrival] = useState(30)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [placed, setPlaced] = useState(false)
@@ -76,9 +88,11 @@ export default function CheckoutPage() {
     e.preventDefault()
     setError('')
     const plateError = validatePlate(plate)
+    const phoneError = validatePhone(phone)
     setPlateTouched(true)
-    if (plateError) {
-      plateRef.current?.focus()
+    setPhoneTouched(true)
+    if (plateError || phoneError) {
+      if (plateError) plateRef.current?.focus()
       return
     }
     setBusy(true)
@@ -88,7 +102,8 @@ export default function CheckoutPage() {
       order = await createOrder({
         station_id: cart.stationId,
         license_plate: plate.trim(),
-        payment_method: method,
+        contact_phone: phone.replace(/[\s.]/g, ''),
+        arrival_minutes: arrival,
         coupon_code: coupon || null,
         items: cart.items.map((i) => ({ menu_item_id: i.id, quantity: i.quantity })),
       })
@@ -98,28 +113,14 @@ export default function CheckoutPage() {
       return
     }
 
-    // Đơn đã tạo xong, giỏ hết nhiệm vụ
+    // Đơn đã tạo xong (chưa trả tiền), giỏ hết nhiệm vụ: sang trang đơn xem mã nhận món
     setPlaced(true)
     clear()
-
-    if (method === 'CASH') {
-      navigate(`/orders/${order.id}`, { replace: true })
-      return
-    }
-
-    try {
-      const next = await payForOrder(order.id)
-      if (next) navigate(next, { replace: true })
-    } catch (err) {
-      // Đơn đã có nhưng chưa tạo được link thanh toán: khách thanh toán lại ở trang đơn
-      navigate(`/orders/${order.id}`, {
-        replace: true,
-        state: { notice: errorMessage(err) },
-      })
-    }
+    navigate(`/orders/${order.id}`, { replace: true })
   }
 
   const plateMessage = plateTouched ? validatePlate(plate) : ''
+  const phoneMessage = phoneTouched ? validatePhone(phone) : ''
 
   if (placed) {
     return (
@@ -168,13 +169,15 @@ export default function CheckoutPage() {
         <span>Tổng thanh toán</span>
         <strong>{formatPrice(subtotal - discount)}</strong>
       </div>
-      <p className="checkout-hint">Giá cuối cùng do hệ thống tính lại khi đặt đơn.</p>
+      <p className="checkout-hint">Giá cuối cùng do hệ thống tính lại khi đặt đơn. Thanh toán tại trạm 1.</p>
 
       <form className="form checkout-form" onSubmit={handleSubmit} noValidate>
         {error && <div className="form-error" role="alert">{error}</div>}
 
         <label className={`field${plateMessage ? ' field-invalid' : ''}`}>
-          Biển số xe <span className="field-required">*</span>
+          <span>
+            Biển số xe <span className="field-required">*</span>
+          </span>
           <input
             ref={plateRef}
             value={plate}
@@ -192,7 +195,7 @@ export default function CheckoutPage() {
             </span>
           ) : (
             <span id="plate-msg" className="field-help">
-              Nhân viên dùng biển số để nhận ra xe của bạn khi tới quầy.
+              Nhân viên trạm 1 và trạm 2 đối chiếu biển số với mã đơn để giao đúng xe.
             </span>
           )}
         </label>
@@ -230,32 +233,60 @@ export default function CheckoutPage() {
           )}
         </label>
 
-        <fieldset className="option-group">
-          <legend>Hình thức thanh toán</legend>
-          {PAYMENT_METHODS.map((m) => (
-            <label key={m.value} className={`option ${method === m.value ? 'option-on' : ''}`}>
-              <input
-                type="radio"
-                name="method"
-                value={m.value}
-                checked={method === m.value}
-                onChange={() => setMethod(m.value)}
-              />
-              <span className="option-icon">
-                <Icon name={m.icon} size={20} />
-              </span>
-              <span>
-                <strong>{m.title}</strong>
-                <small>
-                  {m.note} {m.checkoutNote}
-                </small>
-              </span>
-            </label>
-          ))}
+        <label className={`field${phoneMessage ? ' field-invalid' : ''}`}>
+          <span>
+            Số điện thoại <span className="field-required">*</span>
+          </span>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            onBlur={() => phone.trim() && setPhoneTouched(true)}
+            placeholder="Ví dụ: 0901234567"
+            inputMode="tel"
+            maxLength={12}
+            autoComplete="tel"
+            aria-invalid={!!phoneMessage}
+          />
+          {phoneMessage ? (
+            <span className="field-error" role="alert">{phoneMessage}</span>
+          ) : (
+            <span className="field-help">Cửa hàng gọi cho bạn nếu cần (ví dụ tới trễ hẹn).</span>
+          )}
+        </label>
+
+        <fieldset className="option-group arrival-group">
+          <legend>Bạn sẽ tới trạm 1 trong khoảng</legend>
+          <div className="arrival-choices">
+            {ARRIVAL_CHOICES.map((m) => (
+              <label key={m} className={`arrival-chip${arrival === m ? ' on' : ''}`}>
+                <input
+                  type="radio"
+                  name="arrival"
+                  value={m}
+                  checked={arrival === m}
+                  onChange={() => setArrival(m)}
+                />
+                {m} phút
+              </label>
+            ))}
+          </div>
         </fieldset>
 
+        <div className="hold-notice">
+          <Icon name="clock" size={20} />
+          <div>
+            <strong>Chưa cần thanh toán bây giờ</strong>
+            <p>
+              Sau khi đặt, bạn nhận một <strong>mã nhận món 4 số</strong>. Tới <strong>trạm 1</strong>,
+              đọc mã cho nhân viên và trả tiền mặt hoặc ZaloPay; bếp bắt đầu làm ngay sau đó.
+              Cửa hàng giữ đơn tới {arrival + HOLD_GRACE_MINUTES} phút kể từ lúc đặt. Quá thời gian
+              này, cửa hàng có thể hủy đơn nếu bạn chưa tới.
+            </p>
+          </div>
+        </div>
+
         <button type="submit" className="btn btn-block" disabled={busy}>
-          {busy ? 'Đang xử lý...' : PAYMENT_METHODS.find((m) => m.value === method)?.online ? 'Đặt đơn và thanh toán' : 'Đặt đơn'}
+          {busy ? 'Đang xử lý...' : 'Đặt trước và lấy mã'}
         </button>
       </form>
     </div>

@@ -54,10 +54,10 @@ def test_invalid_token_is_rejected(client):
     assert resp.status_code == 401
 
 
-# ---------- Nhân viên báo còn / hết ----------
-def test_staff_marks_item_sold_out_at_own_station(client, data):
+# ---------- Bếp báo còn / hết ----------
+def test_kitchen_marks_item_sold_out_at_own_station(client, data):
     sid, item_id = data["station"]["id"], data["items"][0]["id"]
-    staff = make_token("STAFF", user_id=5, station_id=sid)
+    staff = make_token("KITCHEN", user_id=5, station_id=sid)
 
     resp = client.put(availability_url(sid, item_id), json={"available": False}, headers=staff)
     assert resp.status_code == 200
@@ -86,9 +86,17 @@ def test_sold_out_only_affects_that_station(client, data):
     assert all(i["available"] for i in items)
 
 
-def test_staff_cannot_change_other_station(client, data):
+def test_station_staff_cannot_change_availability(client, data):
+    """Nhân viên trạm chỉ giao đơn, việc báo hết món thuộc về bếp."""
     sid, item_id = data["station"]["id"], data["items"][0]["id"]
-    staff_elsewhere = make_token("STAFF", station_id=sid + 1)
+    staff = make_token("STAFF", station_id=sid)
+    resp = client.put(availability_url(sid, item_id), json={"available": False}, headers=staff)
+    assert resp.status_code == 403
+
+
+def test_kitchen_cannot_change_other_station(client, data):
+    sid, item_id = data["station"]["id"], data["items"][0]["id"]
+    staff_elsewhere = make_token("KITCHEN", station_id=sid + 1)
     resp = client.put(
         availability_url(sid, item_id), json={"available": False}, headers=staff_elsewhere
     )

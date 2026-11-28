@@ -18,7 +18,10 @@ import "./dashboard.css";
 import "./home.css";
 import "./icons.css";
 import "./modal.css";
+import "./stations.css";
 import AdminPage from "./pages/AdminPage.jsx";
+import KitchenPage from "./pages/KitchenPage.jsx";
+import PrintTicketPage from "./pages/PrintTicketPage.jsx";
 import OrderPage from "./pages/OrderPage.jsx";
 import OrdersPage from "./pages/OrdersPage.jsx";
 import PaymentResultPage from "./pages/PaymentResultPage.jsx";
@@ -26,7 +29,8 @@ import StaffPage from "./pages/StaffPage.jsx";
 
 const ROLE_BADGE = {
   CUSTOMER: "Khách hàng",
-  STAFF: "Nhân viên quầy",
+  STAFF: "Nhân viên trạm",
+  KITCHEN: "Bếp",
   ADMIN: "Quản trị viên",
 };
 
@@ -60,16 +64,16 @@ export default function App() {
                 >
                   Trang chủ
                 </NavLink>
-                <a href="/#stations" className="topbar-link">
+                <a href="/#stations" className="topbar-link topbar-link-extra">
                   Cửa hàng
                 </a>
-                <a href="/#about" className="topbar-link">
+                <a href="/#about" className="topbar-link topbar-link-extra">
                   About
                 </a>
-                <a href="/#combo-promo" className="topbar-link">
+                <a href="/#combo-promo" className="topbar-link topbar-link-extra">
                   Thực đơn nổi bật
                 </a>
-                <a href="/#faq" className="topbar-link">
+                <a href="/#faq" className="topbar-link topbar-link-extra">
                   Hỗ trợ
                 </a>
                 <NavLink
@@ -100,7 +104,17 @@ export default function App() {
                   `topbar-link${isActive ? " active" : ""}`
                 }
               >
-                Màn hình quầy
+                Trạm 1 / Trạm 2
+              </NavLink>
+            )}
+            {user?.role === "KITCHEN" && (
+              <NavLink
+                to="/kitchen"
+                className={({ isActive }) =>
+                  `topbar-link${isActive ? " active" : ""}`
+                }
+              >
+                Bếp
               </NavLink>
             )}
             {user?.role === "ADMIN" && (
@@ -190,6 +204,22 @@ export default function App() {
             element={
               <ProtectedRoute roles={["STAFF"]}>
                 <StaffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/kitchen"
+            element={
+              <ProtectedRoute roles={["KITCHEN"]}>
+                <KitchenPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/kitchen/print/:orderId"
+            element={
+              <ProtectedRoute roles={["KITCHEN", "ADMIN"]}>
+                <PrintTicketPage />
               </ProtectedRoute>
             }
           />
@@ -296,8 +326,8 @@ export default function App() {
           <span>© 2026 GoLane Vietnam. Tất cả các quyền được bảo lưu.</span>
           <div className="footer-badges">
             <span>Thanh toán ZaloPay</span>
-            <span>Tiền mặt tại quầy</span>
-            <span>Nhận món tại làn xe</span>
+            <span>Tiền mặt tại trạm 1</span>
+            <span>Nhận món tại trạm 2</span>
           </div>
         </div>
       </footer>
