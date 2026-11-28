@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { createStaff, getStaff, toggleStaff } from '../../api/admin.js'
 import { errorMessage } from '../../api/client.js'
 
-const EMPTY = { full_name: '', email: '', phone: '', password: '', station_id: '' }
+const EMPTY = { full_name: '', email: '', phone: '', password: '', station_id: '', role: 'STAFF' }
+const ROLE_NAME = { STAFF: 'Nhân viên trạm', KITCHEN: 'Bếp' }
 
 export default function StaffTab({ stations }) {
   const [staff, setStaff] = useState(null)
@@ -106,6 +107,13 @@ export default function StaffTab({ stations }) {
               <input type="password" value={form.password} onChange={set('password')} minLength={6} autoComplete="new-password" required />
             </label>
             <label className="field">
+              Vai trò
+              <select value={form.role} onChange={set('role')}>
+                <option value="STAFF">Nhân viên trạm (trạm 1 / trạm 2)</option>
+                <option value="KITCHEN">Bếp</option>
+              </select>
+            </label>
+            <label className="field">
               Cửa hàng
               <select value={form.station_id} onChange={set('station_id')} required>
                 <option value="">-- Chọn --</option>
@@ -130,6 +138,7 @@ export default function StaffTab({ stations }) {
             <thead>
               <tr>
                 <th>Nhân viên</th>
+                <th>Vai trò</th>
                 <th>Email</th>
                 <th>Điện thoại</th>
                 <th>Cửa hàng</th>
@@ -141,6 +150,7 @@ export default function StaffTab({ stations }) {
               {staff.map((s) => (
                 <tr key={s.id} className={s.is_active ? '' : 'row-off'}>
                   <td><strong>{s.full_name}</strong></td>
+                  <td>{ROLE_NAME[s.role] || s.role}</td>
                   <td>{s.email}</td>
                   <td>{s.phone || '–'}</td>
                   <td>{stationName[s.station_id] || (s.station_id ? `#${s.station_id}` : '–')}</td>

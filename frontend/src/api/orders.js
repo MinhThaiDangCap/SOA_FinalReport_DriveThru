@@ -16,10 +16,6 @@ export const getAvailableCoupons = (subtotal) =>
 export const cancelOrder = (orderId) =>
   client.post(`/orders/${orderId}/cancel`).then((r) => r.data)
 
-export const changePaymentMethod = (orderId, paymentMethod) =>
-  client
-    .patch(`/orders/${orderId}/payment-method`, { payment_method: paymentMethod })
-    .then((r) => r.data)
-
-export const markArrived = (orderId) =>
-  client.post(`/orders/${orderId}/arrived`).then((r) => r.data)
+/** Khách sửa biển số khi đơn còn đang giữ chỗ (nhân viên trạm 1 cũng dùng API này). */
+export const updatePlate = (orderId, licensePlate) =>
+  client.patch(`/orders/${orderId}/plate`, { license_plate: licensePlate }).then((r) => r.data)

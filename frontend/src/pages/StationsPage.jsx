@@ -11,8 +11,9 @@ import { formatPrice, STATUS_LABEL } from '../format.js'
 
 const STEPS = [
   { icon: 'mapPin', title: 'Chọn cửa hàng', text: 'Chọn chi nhánh gần tuyến đường của bạn, xem menu và thời gian chờ.' },
-  { icon: 'card', title: 'Đặt & thanh toán', text: 'Thanh toán trực tuyến qua ZaloPay hoặc trả tiền mặt tại quầy.' },
-  { icon: 'car', title: 'Lái xe tới nhận', text: 'Bấm "Tôi đã đến" khi vào làn xe, nhân viên mang món ra tận nơi.' },
+  { icon: 'ticket', title: 'Đặt trước, nhận mã', text: 'Đặt món trên web, nhận mã nhận món 4 số. Chưa cần trả tiền.' },
+  { icon: 'card', title: 'Trạm 1: đọc mã, thanh toán', text: 'Đọc mã cho nhân viên, trả tiền mặt hoặc ZaloPay. Bếp làm món ngay, bạn chờ ở bãi.' },
+  { icon: 'car', title: 'Trạm 2: nhận món', text: 'Món xong, web mời bạn ra trạm 2. Đọc mã, nhận túi món đúng xe.' },
 ]
 
 const BENEFITS = [
@@ -44,12 +45,12 @@ const BENEFITS = [
 
 const FAQS = [
   {
-    q: 'Làm sao nhân viên biết xe tôi đã đến làn nhận món?',
-    a: 'Khi lái xe tới gần cửa hàng, bạn mở chi tiết đơn hàng và bấm nút "Tôi đã đến". Màn hình quầy sẽ lập tức đánh dấu nổi bật biển số xe của bạn để nhân viên mang món ra.',
+    q: 'Tới cửa hàng tôi cần làm gì?',
+    a: 'Lái xe vào trạm 1 và đọc mã nhận món 4 số trên trang đơn. Nhân viên đối chiếu biển số, bạn trả tiền mặt hoặc ZaloPay ngay trên điện thoại; bếp bắt đầu làm món. Bạn đậu ở bãi chờ, món xong trang đơn sẽ mời bạn ra trạm 2 để nhận.',
   },
   {
-    q: 'Tôi có thể hủy đơn hoặc đổi phương thức thanh toán không?',
-    a: 'Đơn chưa thanh toán và đơn trả tại quầy có thể hủy trên ứng dụng trước khi bếp bắt đầu chế biến món; đơn ZaloPay chưa thanh toán cũng đổi được sang trả tại quầy. Đơn đã thanh toán qua ZaloPay thì không hủy trên ứng dụng: vui lòng gọi hotline 1900 6868, cửa hàng sẽ hỗ trợ hủy đơn và hoàn tiền.',
+    q: 'Tôi có thể hủy đơn không? Đơn được giữ bao lâu?',
+    a: 'Bạn hủy được bất cứ lúc nào trước khi thanh toán ở trạm 1, không mất tiền vì chưa trả. Cửa hàng giữ đơn tới giờ hẹn bạn chọn (15, 30 hoặc 45 phút) cộng thêm 10 phút; quá giờ này cửa hàng có thể hủy đơn, bạn có thể đặt lại. Đã thanh toán thì bếp làm món ngay nên không hủy được nữa.',
   },
   {
     q: 'Món tại cửa hàng hết hàng thì sao?',
@@ -65,7 +66,7 @@ const HERO_FOODS = [
   { icon: 'iceCream', tone: 'dessert' },
 ]
 
-const ACTIVE = ['PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'ARRIVED']
+const ACTIVE = ['HOLD', 'AWAITING_PAYMENT', 'PENDING_PAYMENT', 'CONFIRMED', 'PREPARING', 'READY', 'ARRIVED']
 
 export function isOpenNow(hours, now = new Date()) {
   if (!hours) return null
@@ -96,13 +97,13 @@ function ActiveOrders() {
   return (
     <section className="active-orders">
       <h2>Đơn của bạn đang tiến hành</h2>
-      <p className="active-hint">Theo dõi trạng thái đơn hàng hoặc báo "Tôi đã đến" khi xe tới làn.</p>
+      <p className="active-hint">Mở đơn để xem mã nhận món và theo dõi khi nào được mời ra trạm 2.</p>
       <ul>
         {orders.slice(0, 3).map((o) => (
           <li key={o.id}>
             <Link to={`/orders/${o.id}`} className="active-order">
               <span>
-                <strong>Đơn #{o.id}</strong> · <LicensePlate value={o.license_plate} size="sm" /> · {formatPrice(o.total_amount)}
+                <strong>Đơn #{o.id}{o.pickup_code ? ` · Mã ${o.pickup_code}` : ''}</strong> · <LicensePlate value={o.license_plate} size="sm" /> · {formatPrice(o.total_amount)}
               </span>
               <span className={`status-pill status-${o.status.toLowerCase()}`}>
                 {STATUS_LABEL[o.status]}
@@ -225,8 +226,8 @@ export default function StationsPage() {
           <span className="hero-pill with-icon"><Icon name="car" size={15} /> GoLane Drive-Thru · Đặt trước trên Web</span>
           <h1>Đặt trước, lái xe qua, nhận món nóng hổi tức thì</h1>
           <p className="hero-desc">
-            Chọn chi nhánh thuận đường nhất, gọi món và thanh toán ngay trên web. Khi tới làn xe,
-            chỉ cần chạm nhẹ <strong>"Tôi đã đến"</strong>, nhân viên sẽ mang bữa ăn ra tận cửa xe.
+            Chọn chi nhánh thuận đường nhất, đặt món trước trên web và nhận <strong>mã 4 số</strong>.
+            Tới trạm 1 đọc mã, thanh toán; món xong thì ra trạm 2 nhận, không phải chờ trong làn.
           </p>
           <div className="hero-actions">
             <a href="#stations" className="btn">Chọn cửa hàng & đặt món</a>

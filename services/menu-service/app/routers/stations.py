@@ -103,7 +103,7 @@ def get_station_menu(station_id: int, db: Session = Depends(get_db)):
     return StationMenuOut(station=StationOut.model_validate(station), categories=result)
 
 
-# ---------- Nhân viên: báo còn / hết ----------
+# ---------- Bếp: báo còn / hết ----------
 @router.put(
     "/{station_id}/items/{item_id}/availability", response_model=AvailabilityOut
 )
@@ -112,10 +112,11 @@ def set_availability(
     item_id: int,
     payload: AvailabilityIn,
     db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+    user: dict = Depends(require_roles("KITCHEN", "ADMIN")),
 ):
-    """Nhân viên chỉ được sửa món ở cửa hàng của mình; admin sửa được mọi cửa hàng."""
-    if user["role"] == "STAFF" and user["station_id"] != station_id:
+    """Bếp biết nguyên liệu nên bếp báo hết món, chỉ ở chi nhánh của mình;
+    admin sửa được mọi chi nhánh. Nhân viên trạm (STAFF) không có quyền này."""
+    if user["role"] == "KITCHEN" and user["station_id"] != station_id:
         raise HTTPException(
             status_code=403, detail="Bạn chỉ được cập nhật món ở cửa hàng của mình"
         )

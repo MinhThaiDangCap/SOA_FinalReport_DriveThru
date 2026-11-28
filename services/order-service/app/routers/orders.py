@@ -1,8 +1,17 @@
+"""API đơn hàng theo mô hình 2 trạm.
+
+Khách đặt trước trên web (chưa trả tiền) -> nhận mã 4 số, đơn ĐANG TREO.
+Trạm 1: khách đọc mã, nhân viên đối chiếu biển số, khách trả tiền mặt / ZaloPay -> đơn vào bếp.
+Bếp: làm theo hàng đợi ưu tiên (app/estimate.py), in phiếu dán lên túi, bấm "Món đã xong".
+Trạm 2: khách đọc mã, nhân viên đối chiếu biển số, giao món.
+"""
+
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from prometheus_client import Counter
-from sqlalchemy import case, func, select
+from sqlalchemy import case, false, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import payment_client
@@ -10,74 +19,103 @@ from app.coupons import apply_coupon
 from app.database import get_db
 from app.estimate import (
     DEFAULT_KITCHEN_CAPACITY,
+    KITCHEN_STATUSES,
     TYPICAL_ORDER_MINUTES,
-    backlog_minutes,
+    lock_station,
     order_prep_minutes,
-    set_estimate,
-    wait_minutes,
+    recompute_station,
+    start_preparing,
+    wait_minutes_for_new_order,
 )
 from app.menu_client import get_kitchen_capacities, get_menu_items
 from app.models import Order, OrderItem, OrderStatus, OrderStatusHistory
+from app.pickup import new_pickup_code, normalize_plate, vn_today
 from app.schemas import (
+    CheckIn,
     OrderCreate,
     OrderOut,
-    PaymentMethodUpdate,
+    PlateUpdate,
     StationOrderStats,
     StationWaitTime,
     StatusUpdate,
 )
 from app.security import get_current_user, require_roles
-from app.state_machine import ALLOWED, change_status
+from app.state_machine import change_status
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
+# Giữ tên metric cũ để dashboard Grafana không đổi: đếm đơn đã trả tiền ở trạm 1 và vào bếp,
+# chia theo cách trả (đơn treo chưa trả tiền chưa được đếm)
 ORDERS_CREATED = Counter(
-    "orders_created_total", "Số đơn hàng đã tạo", ["payment_method"]
+    "orders_created_total", "Số đơn đã trả tiền ở trạm 1 và vào bếp", ["payment_method"]
 )
 
-# Các trạng thái nhân viên cần nhìn thấy trong hàng đợi
-QUEUE_STATUSES = [
-    OrderStatus.CONFIRMED.value,
-    OrderStatus.PREPARING.value,
-    OrderStatus.READY.value,
-    OrderStatus.ARRIVED.value,
+S = OrderStatus
+HOLD_GRACE_MINUTES = 10  # giữ đơn thêm 10 phút sau giờ khách hẹn tới
+
+# Đơn còn đang xử lý (chưa hoàn thành / hủy)
+ACTIVE_STATUSES = [
+    S.HOLD.value,
+    S.AWAITING_PAYMENT.value,
+    S.CONFIRMED.value,
+    S.PREPARING.value,
+    S.READY.value,
+    S.PENDING_PAYMENT.value,
+    S.ARRIVED.value,
 ]
+# Đơn chưa trả tiền: hủy được, không phát sinh hoàn tiền
+UNPAID_STATUSES = (S.HOLD.value, S.AWAITING_PAYMENT.value, S.PENDING_PAYMENT.value)
+# Vai trò gắn với một chi nhánh: chỉ thao tác được đơn của chi nhánh mình
+STATION_ROLES = ("STAFF", "KITCHEN")
 
 
 # ---------- Hàm dùng chung ----------
-# Hủy đơn đã thanh toán ZaloPay và hoàn tiền nằm ngoài phạm vi hệ thống: cửa hàng xử lý
-# qua hotline (hoàn tiền trên trang quản lý của ZaloPay)
-HOTLINE = "1900 6868"
-PAID_CANCEL_MESSAGE = (
-    "Đơn đã thanh toán qua ZaloPay nên không thể hủy trên ứng dụng. "
-    f"Vui lòng liên hệ hotline cửa hàng {HOTLINE} để được hỗ trợ hủy đơn và hoàn tiền."
-)
-
-
 def get_order_or_404(db: Session, order_id: int, lock: bool = False) -> Order:
     """lock=True khóa dòng đơn hàng (FOR UPDATE) để 2 request không đổi trạng thái cùng lúc."""
     stmt = select(Order).where(Order.id == order_id)
     if lock:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     order = db.scalar(stmt)
     if order is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn hàng")
     return order
 
 
-def update_estimate(db: Session, order: Order) -> None:
-    """Tính lại giờ xong dự kiến, lấy số đơn bếp làm cùng lúc từ menu-service."""
-    capacity = get_kitchen_capacities().get(order.station_id, DEFAULT_KITCHEN_CAPACITY)
-    set_estimate(db, order, capacity)
+def kitchen_capacity(station_id: int) -> int:
+    return get_kitchen_capacities().get(station_id, DEFAULT_KITCHEN_CAPACITY)
 
 
-def ensure_staff_station(user: dict, order: Order) -> None:
-    """Nhân viên chỉ thao tác được đơn của cửa hàng mình; admin thì mọi cửa hàng."""
-    if user["role"] == "STAFF" and user["station_id"] != order.station_id:
-        raise HTTPException(status_code=403, detail="Đơn này thuộc cửa hàng khác")
+def refresh_kitchen(db: Session, station_id: int) -> list[Order]:
+    """Tính lại giờ dự kiến của cả hàng đợi bếp (gọi sau lock_station). Không commit."""
+    db.flush()
+    return recompute_station(db, station_id, kitchen_capacity(station_id))
 
 
-# ---------- Khách: tạo đơn ----------
+def ensure_station(user: dict, order: Order) -> None:
+    """Nhân viên trạm và bếp chỉ thao tác được đơn của chi nhánh mình; admin thì mọi nơi."""
+    if user["role"] in STATION_ROLES and user["station_id"] != order.station_id:
+        raise HTTPException(status_code=403, detail="Đơn này thuộc chi nhánh khác")
+
+
+def station_of(user: dict, station_id: int | None) -> int | None:
+    """Nhân viên/bếp luôn dùng chi nhánh trong token; admin chọn qua query (hoặc tất cả)."""
+    if user["role"] in STATION_ROLES:
+        if user["station_id"] is None:
+            raise HTTPException(status_code=400, detail="Tài khoản chưa được gán chi nhánh")
+        return user["station_id"]
+    return station_id
+
+
+def log_note(order: Order, user_id: int | None, note: str) -> None:
+    """Ghi lịch sử không đổi trạng thái (sửa biển số, đổi cách trả...)."""
+    order.history.append(
+        OrderStatusHistory(
+            from_status=order.status, to_status=order.status, changed_by=user_id, note=note
+        )
+    )
+
+
+# ---------- Khách: đặt trước ----------
 @router.post("", response_model=OrderOut, status_code=201)
 def create_order(
     payload: OrderCreate,
@@ -94,21 +132,34 @@ def create_order(
     # 2. Hỏi menu-service để lấy tên và giá (không tin giá client gửi lên)
     menu = get_menu_items(payload.station_id, list(qty_by_item))
 
-    order_items: list[OrderItem] = []
+    lines: list[tuple[int, dict, int]] = []
     subtotal = 0
     for item_id, qty in qty_by_item.items():
         m = menu.get(item_id)
         if m is None:
             raise HTTPException(
-                status_code=400,
-                detail=f"Món {item_id} không tồn tại ở cửa hàng này",
+                status_code=400, detail=f"Món {item_id} không tồn tại ở cửa hàng này"
             )
         if not m.get("available", True):
-            raise HTTPException(
-                status_code=400, detail=f"Món '{m['name']}' hiện đã hết"
-            )
+            raise HTTPException(status_code=400, detail=f"Món '{m['name']}' hiện đã hết")
         subtotal += m["price"] * qty
-        order_items.append(
+        lines.append((item_id, m, qty))
+
+    # 3. Mã giảm giá
+    discount, coupon_code = apply_coupon(db, payload.coupon_code, subtotal)
+
+    # 4. Giờ hẹn tới trạm 1 và hạn giữ đơn
+    now = datetime.now(timezone.utc)
+    expected = now + timedelta(minutes=payload.arrival_minutes)
+    expires = expected + timedelta(minutes=HOLD_GRACE_MINUTES)
+
+    # 5. Lưu đơn kèm mã nhận món; hai đơn bốc trùng mã cùng lúc thì bốc lại
+    for _ in range(5):
+        day = vn_today()
+        code = new_pickup_code(db, payload.station_id, day)
+        if code is None:
+            raise HTTPException(status_code=503, detail="Cửa hàng đã hết mã đơn trong ngày")
+        items = [
             OrderItem(
                 menu_item_id=item_id,
                 item_name=m["name"],
@@ -116,46 +167,43 @@ def create_order(
                 quantity=qty,
                 prep_minutes=m.get("prep_minutes", 3),
             )
+            for item_id, m, qty in lines
+        ]
+        order = Order(
+            customer_id=user["id"],
+            station_id=payload.station_id,
+            license_plate=payload.license_plate,
+            contact_phone=payload.contact_phone,
+            status=S.HOLD.value,
+            pickup_code=code,
+            pickup_date=day,
+            expected_arrival_at=expected,
+            hold_expires_at=expires,
+            subtotal=subtotal,
+            discount_amount=discount,
+            total_amount=subtotal - discount,
+            coupon_code=coupon_code,
+            prep_minutes=order_prep_minutes([(it.prep_minutes, it.quantity) for it in items]),
         )
-
-    # 3. Mã giảm giá
-    discount, coupon_code = apply_coupon(db, payload.coupon_code, subtotal)
-
-    # 4. Trả tại quầy vào thẳng CONFIRMED, ZaloPay phải chờ thanh toán
-    if payload.payment_method == "CASH":
-        status = OrderStatus.CONFIRMED.value
-        note = "Khách chọn trả tại quầy"
+        order.items = items
+        order.history.append(
+            OrderStatusHistory(
+                from_status=None,
+                to_status=S.HOLD.value,
+                changed_by=user["id"],
+                note=f"Đặt trước, mã {code}, hẹn tới trạm 1 trong {payload.arrival_minutes} phút",
+            )
+        )
+        db.add(order)
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
     else:
-        status = OrderStatus.PENDING_PAYMENT.value
-        note = "Chờ thanh toán ZaloPay"
+        raise HTTPException(status_code=503, detail="Không tạo được mã đơn, vui lòng thử lại")
 
-    order = Order(
-        customer_id=user["id"],
-        station_id=payload.station_id,
-        license_plate=payload.license_plate,
-        status=status,
-        payment_method=payload.payment_method,
-        subtotal=subtotal,
-        discount_amount=discount,
-        total_amount=subtotal - discount,
-        coupon_code=coupon_code,
-        prep_minutes=order_prep_minutes(
-            [(it.prep_minutes, it.quantity) for it in order_items]
-        ),
-    )
-    order.items = order_items
-    order.history.append(
-        OrderStatusHistory(
-            from_status=None, to_status=status, changed_by=user["id"], note=note
-        )
-    )
-
-    db.add(order)
-    update_estimate(db, order)
-    db.commit()
     db.refresh(order)
-
-    ORDERS_CREATED.labels(payment_method=payload.payment_method).inc()
     return order
 
 
@@ -165,33 +213,165 @@ def my_orders(
     db: Session = Depends(get_db),
     user: dict = Depends(require_roles("CUSTOMER")),
 ):
-    stmt = (
-        select(Order)
-        .where(Order.customer_id == user["id"])
-        .order_by(Order.id.desc())
-    )
+    stmt = select(Order).where(Order.customer_id == user["id"]).order_by(Order.id.desc())
     return db.scalars(stmt).all()
 
 
-# ---------- Nhân viên / admin: hàng đợi ----------
-@router.get("/queue", response_model=list[OrderOut])
-def station_queue(
+# ---------- Trạm 1: đơn đang treo / đang chờ thanh toán ----------
+@router.get("/station/holds", response_model=list[OrderOut])
+def station_holds(
     station_id: int | None = Query(default=None, description="Chỉ admin dùng"),
     db: Session = Depends(get_db),
     user: dict = Depends(require_roles("STAFF", "ADMIN")),
 ):
-    if user["role"] == "STAFF":
-        station_id = user["station_id"]
-        if station_id is None:
-            raise HTTPException(
-                status_code=400, detail="Tài khoản nhân viên chưa được gán cửa hàng"
-            )
+    """Đơn khách đã đặt nhưng chưa trả tiền ở trạm 1, khách hẹn tới sớm nhất lên đầu.
 
-    stmt = select(Order).where(Order.status.in_(QUEUE_STATUSES))
+    Đơn quá hạn giữ có is_overdue=true (giao diện tô đỏ). Hệ thống không tự hủy:
+    nhân viên xem số điện thoại và tự quyết định hủy.
+    """
+    station_id = station_of(user, station_id)
+    stmt = select(Order).where(
+        Order.status.in_((S.HOLD.value, S.AWAITING_PAYMENT.value))
+    )
     if station_id is not None:
         stmt = stmt.where(Order.station_id == station_id)
-    stmt = stmt.order_by(Order.id.asc())  # đơn cũ nhất lên đầu
-    return db.scalars(stmt).all()
+    return db.scalars(stmt.order_by(Order.expected_arrival_at.asc(), Order.id.asc())).all()
+
+
+# ---------- Trạm 1 / Trạm 2: tìm đơn theo mã hoặc biển số ----------
+@router.get("/station/lookup", response_model=list[OrderOut])
+def lookup_orders(
+    q: str = Query(min_length=2, max_length=20, description="Mã 4 số hoặc biển số"),
+    station_id: int | None = Query(default=None, description="Chỉ admin dùng"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+):
+    station_id = station_of(user, station_id)
+    plate = normalize_plate(q)
+    plate_col = func.upper(
+        func.replace(func.replace(func.replace(Order.license_plate, "-", ""), ".", ""), " ", "")
+    )
+    stmt = select(Order).where(
+        Order.status.in_(ACTIVE_STATUSES),
+        or_(Order.pickup_code == q.strip(), plate_col.contains(plate) if plate else false()),
+    )
+    if station_id is not None:
+        stmt = stmt.where(Order.station_id == station_id)
+    return db.scalars(stmt.order_by(Order.id.desc()).limit(20)).all()
+
+
+# ---------- Trạm 1: nhận đơn, khách chọn cách trả ----------
+@router.post("/{order_id}/check-in", response_model=OrderOut)
+def check_in(
+    order_id: int,
+    payload: CheckIn,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+):
+    """Khách đã tới trạm 1, đọc mã, biển số khớp. Đơn chuyển sang chờ thanh toán.
+
+    - Tiền mặt: nhân viên thu rồi bấm "Đã thu tiền" (payment-service), đơn vào bếp.
+    - ZaloPay: trang đơn trên điện thoại khách hiện nút thanh toán; callback về thì
+      đơn tự vào bếp.
+    Gọi lại khi đơn đang chờ thanh toán để đổi cách trả.
+    """
+    order = get_order_or_404(db, order_id, lock=True)
+    ensure_station(user, order)
+
+    if order.status == S.HOLD.value:
+        order.payment_method = payload.payment_method
+        order.checked_in_at = datetime.now(timezone.utc)
+        method = "tiền mặt" if payload.payment_method == "CASH" else "ZaloPay"
+        change_status(order, S.AWAITING_PAYMENT, user["id"], f"Trạm 1 nhận đơn, khách trả {method}")
+    elif order.status == S.AWAITING_PAYMENT.value:
+        if order.payment_method != payload.payment_method:
+            order.payment_method = payload.payment_method
+            method = "tiền mặt" if payload.payment_method == "CASH" else "ZaloPay"
+            log_note(order, user["id"], f"Đổi sang trả {method}")
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail="Đơn không còn chờ xác nhận ở trạm 1 (đã thanh toán, hoàn thành hoặc đã hủy)",
+        )
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+# ---------- Khách (đơn đang treo) / Trạm 1: sửa biển số ----------
+@router.patch("/{order_id}/plate", response_model=OrderOut)
+def update_plate(
+    order_id: int,
+    payload: PlateUpdate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("CUSTOMER", "STAFF", "ADMIN")),
+):
+    """Khách gõ sai biển số hoặc đổi xe: khách tự sửa khi đơn còn treo; tại trạm 1 nhân viên
+    sửa sau khi xác minh bằng tên / số điện thoại. Mọi lần sửa đều ghi lịch sử."""
+    order = get_order_or_404(db, order_id, lock=True)
+    if user["role"] == "CUSTOMER":
+        if order.customer_id != user["id"]:
+            raise HTTPException(status_code=403, detail="Không đủ quyền")
+        allowed = (S.HOLD.value,)
+    else:
+        ensure_station(user, order)
+        allowed = (S.HOLD.value, S.AWAITING_PAYMENT.value)
+    if order.status not in allowed:
+        raise HTTPException(status_code=409, detail="Không thể sửa biển số ở bước này")
+
+    old = order.license_plate
+    if payload.license_plate != old:
+        order.license_plate = payload.license_plate
+        log_note(order, user["id"], f"Sửa biển số {old} -> {payload.license_plate}")
+        db.commit()
+        db.refresh(order)
+    return order
+
+
+# ---------- Bếp: hàng đợi theo thứ tự ưu tiên ----------
+@router.get("/kitchen", response_model=list[OrderOut])
+def kitchen_queue(
+    station_id: int | None = Query(default=None, description="Chỉ admin dùng (bắt buộc)"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("KITCHEN", "ADMIN")),
+):
+    """Các đơn đã trả tiền, theo thứ tự bếp nên làm: đơn đang làm, đơn chờ quá lâu,
+    rồi đơn làm nhanh trước. Giờ dự kiến được tính lại mỗi lần bếp tải hàng đợi."""
+    station_id = station_of(user, station_id)
+    if station_id is None:
+        raise HTTPException(status_code=400, detail="Cần chọn chi nhánh (station_id)")
+    lock_station(db, station_id)
+    ordered = refresh_kitchen(db, station_id)
+    db.commit()
+    return ordered
+
+
+# ---------- Trạm 2: đơn đã xong, mời khách ra nhận ----------
+@router.get("/station/ready", response_model=list[OrderOut])
+def ready_orders(
+    station_id: int | None = Query(default=None, description="Chỉ admin dùng"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+):
+    station_id = station_of(user, station_id)
+    stmt = select(Order).where(Order.status == S.READY.value)
+    if station_id is not None:
+        stmt = stmt.where(Order.station_id == station_id)
+    return db.scalars(stmt.order_by(Order.updated_at.asc(), Order.id.asc())).all()
+
+
+# ---------- Admin / nhân viên: tất cả đơn đang xử lý ----------
+@router.get("/queue", response_model=list[OrderOut])
+def station_queue(
+    station_id: int | None = Query(default=None, description="Chỉ admin dùng"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("STAFF", "KITCHEN", "ADMIN")),
+):
+    station_id = station_of(user, station_id)
+    stmt = select(Order).where(Order.status.in_(ACTIVE_STATUSES))
+    if station_id is not None:
+        stmt = stmt.where(Order.station_id == station_id)
+    return db.scalars(stmt.order_by(Order.id.asc())).all()
 
 
 # ---------- Công khai: độ đông của từng cửa hàng (trang chủ) ----------
@@ -199,40 +379,38 @@ def station_queue(
 def wait_times(db: Session = Depends(get_db)):
     """Không cần đăng nhập, chỉ trả số lượng, không lộ thông tin đơn.
 
-    estimated_minutes = thời gian chờ bếp làm xong các đơn trước
-    + thời gian làm một đơn điển hình (xem app/estimate.py).
+    estimated_minutes = thời gian chờ tới lượt trong bếp + một đơn điển hình,
+    tính từ lúc khách trả tiền ở trạm 1.
     """
     rows = db.execute(
         select(Order.station_id, func.count(Order.id))
-        .where(Order.status.in_(QUEUE_STATUSES))
+        .where(Order.status.in_(KITCHEN_STATUSES))
         .group_by(Order.station_id)
     ).all()
     capacities = get_kitchen_capacities() if rows else {}
-    result = []
-    for station_id, count in rows:
-        capacity = capacities.get(station_id, DEFAULT_KITCHEN_CAPACITY)
-        wait = wait_minutes(backlog_minutes(db, station_id), capacity)
-        result.append(
-            StationWaitTime(
-                station_id=station_id,
-                queue_count=count,
-                estimated_minutes=wait + TYPICAL_ORDER_MINUTES,
+    return [
+        StationWaitTime(
+            station_id=station_id,
+            queue_count=count,
+            estimated_minutes=wait_minutes_for_new_order(
+                db, station_id, capacities.get(station_id, DEFAULT_KITCHEN_CAPACITY)
             )
+            + TYPICAL_ORDER_MINUTES,
         )
-    return result
+        for station_id, count in rows
+    ]
 
 
-# ---------- Nhân viên / admin: đơn đã xong gần đây ----------
+# ---------- Nhân viên / bếp / admin: đơn đã xong gần đây ----------
 @router.get("/recent", response_model=list[OrderOut])
 def recent_orders(
     station_id: int | None = Query(default=None, description="Chỉ admin dùng"),
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+    user: dict = Depends(require_roles("STAFF", "KITCHEN", "ADMIN")),
 ):
-    if user["role"] == "STAFF":
-        station_id = user["station_id"]
-    done = (OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value)
+    station_id = station_of(user, station_id)
+    done = (S.COMPLETED.value, S.CANCELLED.value)
     stmt = select(Order).where(Order.status.in_(done))
     if station_id is not None:
         stmt = stmt.where(Order.station_id == station_id)
@@ -249,10 +427,9 @@ def order_stats(
     vn = timezone(timedelta(hours=7))
     today_start = datetime.now(vn).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    S = OrderStatus
     completed = Order.status == S.COMPLETED.value
     is_today = Order.created_at >= today_start
-    active = Order.status.in_(QUEUE_STATUSES)
+    active = Order.status.in_(ACTIVE_STATUSES)
 
     def count_if(cond):
         return func.sum(case((cond, 1), else_=0))
@@ -295,196 +472,94 @@ def get_order(
     user: dict = Depends(get_current_user),
 ):
     order = get_order_or_404(db, order_id)
-    # Khách chỉ xem được đơn của mình; nhân viên chỉ xem đơn cửa hàng mình
+    # Khách chỉ xem được đơn của mình; nhân viên / bếp chỉ xem đơn chi nhánh mình
     if user["role"] == "CUSTOMER" and order.customer_id != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
-    ensure_staff_station(user, order)
+    ensure_station(user, order)
     return order
 
 
-# ---------- Nhân viên / admin: cập nhật trạng thái ----------
+# ---------- Bếp / Trạm 2: cập nhật trạng thái ----------
+# Ai được chuyển đơn sang trạng thái nào
+STATUS_ROLES = {
+    S.PREPARING.value: ("KITCHEN", "ADMIN"),   # bếp bắt đầu làm
+    S.READY.value: ("KITCHEN", "ADMIN"),       # bếp làm xong, đã dán phiếu lên túi
+    S.COMPLETED.value: ("STAFF", "ADMIN"),     # trạm 2 đã giao cho khách
+}
+
+
 @router.patch("/{order_id}/status", response_model=OrderOut)
 def update_status(
     order_id: int,
     payload: StatusUpdate,
     db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("STAFF", "ADMIN")),
+    user: dict = Depends(require_roles("STAFF", "KITCHEN", "ADMIN")),
 ):
-    order = get_order_or_404(db, order_id, lock=True)
-    ensure_staff_station(user, order)
+    if user["role"] not in STATUS_ROLES[payload.status]:
+        who = "bếp" if user["role"] == "STAFF" else "nhân viên trạm 2"
+        raise HTTPException(status_code=403, detail=f"Bước này do {who} thực hiện")
 
-    # Đơn trả tại quầy: phải ghi nhận đã thu tiền (payment-service) rồi mới được hoàn thành
-    # (chỉ hỏi khi bước chuyển hợp lệ, để lỗi sai trạng thái vẫn trả 409 như cũ)
-    if (
-        payload.status == OrderStatus.COMPLETED.value
-        and OrderStatus.COMPLETED in ALLOWED[OrderStatus(order.status)]
-        and order.payment_method == "CASH"
-        and not payment_client.is_paid(order.id)
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail="Đơn trả tại quầy chưa được xác nhận thu tiền, không thể hoàn thành",
-        )
+    order = get_order_or_404(db, order_id)
+    ensure_station(user, order)
+    lock_station(db, order.station_id)          # khóa hàng đợi bếp trước, rồi tới dòng đơn
+    order = get_order_or_404(db, order_id, lock=True)
 
     change_status(order, OrderStatus(payload.status), user["id"], payload.note)
-    if order.status == OrderStatus.PREPARING.value:
-        update_estimate(db, order)  # bếp bắt đầu làm: xong sau prep_minutes
+    if order.status == S.PREPARING.value:
+        start_preparing(order)                  # xong sau đúng số phút của đơn
+    if order.status in (S.PREPARING.value, S.READY.value):
+        refresh_kitchen(db, order.station_id)   # bếp có thêm / bớt chỗ: tính lại các đơn khác
     db.commit()
     db.refresh(order)
     return order
 
 
-# ---------- Khách: hủy đơn ----------
+# ---------- Khách / Trạm 1: hủy đơn chưa trả tiền ----------
 @router.post("/{order_id}/cancel", response_model=OrderOut)
 def cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("CUSTOMER")),
+    user: dict = Depends(require_roles("CUSTOMER", "STAFF", "ADMIN")),
 ):
-    order = get_order_or_404(db, order_id)
-    if order.customer_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Không đủ quyền")
+    """Chỉ hủy được đơn CHƯA trả tiền (đang treo hoặc đang chờ thanh toán ở trạm 1).
 
-    # Đơn ZaloPay đang chờ: khách có thể vừa quét mã xong mà callback chưa tới.
-    # Hỏi payment-service (tự tra cứu ZaloPay) TRƯỚC khi khóa đơn: nếu đã trả thì
-    # payment-service gọi lại order-service xác nhận đơn, đơn chuyển sang CONFIRMED.
-    if (
-        order.payment_method == "ZALOPAY"
-        and order.status == OrderStatus.PENDING_PAYMENT.value
+    Khách tự hủy đơn của mình. Nhân viên trạm 1 hủy đơn của chi nhánh, thường là đơn quá
+    hạn giữ (đã có số điện thoại để tự gọi khách nếu muốn). Hệ thống không tự hủy đơn.
+    Đã trả tiền thì đơn đã vào bếp, không hủy nữa, nên không bao giờ phải hoàn tiền.
+    """
+    order = get_order_or_404(db, order_id)
+    if user["role"] == "CUSTOMER":
+        if order.customer_id != user["id"]:
+            raise HTTPException(status_code=403, detail="Không đủ quyền")
+        note = "Khách hủy đơn"
+    else:
+        ensure_station(user, order)
+        note = "Nhân viên trạm 1 hủy đơn" + (" quá hạn giữ" if order.is_overdue else "")
+
+    # Đơn đang trả ZaloPay: khách có thể vừa trả xong mà callback chưa tới. Hỏi
+    # payment-service (tự tra cứu ZaloPay) TRƯỚC khi khóa đơn: nếu đã trả thì payment-service
+    # gọi lại order-service xác nhận đơn, đơn vào bếp và không hủy được nữa.
+    if order.payment_method == "ZALOPAY" and order.status in (
+        S.AWAITING_PAYMENT.value,
+        S.PENDING_PAYMENT.value,
     ):
         payment_client.is_paid(order.id, sync=True)
         db.expire_all()
 
     order = get_order_or_404(db, order_id, lock=True)
-
-    # Chỉ hủy được khi cửa hàng CHƯA bắt đầu làm món
-    cancellable = (OrderStatus.PENDING_PAYMENT.value, OrderStatus.CONFIRMED.value)
-    if order.status not in cancellable:
+    if order.status not in UNPAID_STATUSES:
         reasons = {
-            OrderStatus.COMPLETED.value: "Đơn đã hoàn thành nên không thể hủy.",
-            OrderStatus.CANCELLED.value: "Đơn này đã được hủy trước đó.",
+            S.COMPLETED.value: "Đơn đã hoàn thành nên không thể hủy.",
+            S.CANCELLED.value: "Đơn này đã được hủy trước đó.",
         }
         raise HTTPException(
             status_code=409,
             detail=reasons.get(
-                order.status, "Cửa hàng đã bắt đầu làm món nên không thể hủy đơn nữa."
+                order.status, "Đơn đã thanh toán và đang được bếp làm nên không thể hủy."
             ),
         )
 
-    # Đơn ZaloPay đã CONFIRMED tức là đã trả tiền: không cho tự hủy, khách gọi hotline
-    if (
-        order.payment_method == "ZALOPAY"
-        and order.status == OrderStatus.CONFIRMED.value
-    ):
-        raise HTTPException(status_code=409, detail=PAID_CANCEL_MESSAGE)
-
-    change_status(order, OrderStatus.CANCELLED, user["id"], "Khách hủy đơn")
-    db.commit()
-    db.refresh(order)
-    return order
-
-
-# ---------- Khách: đổi phương thức thanh toán ----------
-@router.patch("/{order_id}/payment-method", response_model=OrderOut)
-def change_payment_method(
-    order_id: int,
-    payload: PaymentMethodUpdate,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("CUSTOMER")),
-):
-    """Chỉ cho đổi ZALOPAY -> CASH khi đơn ZaloPay CHƯA được thanh toán.
-
-    ZALOPAY -> CASH: đơn đang chờ thanh toán -> vào thẳng hàng đợi của quầy (CONFIRMED).
-    CASH -> ZALOPAY: KHÔNG cho đổi. Đơn trả tại quầy đã nằm trong hàng đợi của cửa hàng,
-    rút đơn về "chờ thanh toán" sẽ làm đơn biến mất khỏi màn hình quầy và dễ xung đột
-    khi nhân viên đang bấm "Bắt đầu làm" (giống các app giao đồ ăn: đơn tiền mặt đã đặt
-    thì không đổi phương thức). Khách muốn trả online thì hủy đơn khi bếp chưa làm và
-    đặt lại.
-    """
-    order = get_order_or_404(db, order_id)
-    if order.customer_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Không đủ quyền")
-
-    new_method = payload.payment_method
-    if order.payment_method == new_method:
-        return order  # không đổi gì
-
-    if order.payment_method == "CASH":
-        raise HTTPException(
-            status_code=409,
-            detail="Đơn trả tại quầy đã được gửi tới cửa hàng nên không thể đổi sang ZaloPay. "
-            "Nếu muốn thanh toán online, bạn có thể hủy đơn (khi cửa hàng chưa làm món) "
-            "và đặt lại.",
-        )
-
-    # Hỏi payment-service (tự tra cứu ZaloPay) TRƯỚC khi khóa đơn: khách có thể vừa
-    # quét mã xong mà callback chưa tới, đã trả rồi thì không được đổi sang tiền mặt
-    if order.status == OrderStatus.PENDING_PAYMENT.value and payment_client.is_paid(
-        order.id, sync=True
-    ):
-        raise HTTPException(
-            status_code=409,
-            detail="Đơn đã được thanh toán, không thể đổi phương thức thanh toán.",
-        )
-    db.expire_all()
-
-    order = get_order_or_404(db, order_id, lock=True)
-    if order.status != OrderStatus.PENDING_PAYMENT.value:
-        raise HTTPException(
-            status_code=409,
-            detail="Đơn đã được thanh toán hoặc cửa hàng đã bắt đầu làm món, "
-            "không thể đổi phương thức thanh toán nữa.",
-        )
-
-    # ZaloPay (chưa trả) -> CASH: đơn vào thẳng hàng đợi của quầy
-    order.payment_method = "CASH"
-    change_status(order, OrderStatus.CONFIRMED, user["id"], "Khách đổi sang trả tại quầy")
-    update_estimate(db, order)
-    db.commit()
-    db.refresh(order)
-    return order
-
-
-# ---------- Khách: báo "Tôi đã đến" ----------
-@router.post("/{order_id}/arrived", response_model=OrderOut)
-def customer_arrived(
-    order_id: int,
-    db: Session = Depends(get_db),
-    user: dict = Depends(require_roles("CUSTOMER")),
-):
-    """Khách báo đã tới làn nhận món. Chỉ ghi lại giờ đến, KHÔNG đổi tiến độ bếp:
-    xe tới sớm thì quầy biết để ưu tiên, nhưng món vẫn phải "Món đã xong" rồi mới giao."""
-    order = get_order_or_404(db, order_id, lock=True)
-    if order.customer_id != user["id"]:
-        raise HTTPException(status_code=403, detail="Không đủ quyền")
-
-    # Bấm lại nhiều lần vẫn an toàn
-    if order.arrived_at is not None or order.status == OrderStatus.ARRIVED.value:
-        return order
-
-    can_arrive = (
-        OrderStatus.CONFIRMED.value,
-        OrderStatus.PREPARING.value,
-        OrderStatus.READY.value,
-    )
-    if order.status not in can_arrive:
-        reasons = {
-            OrderStatus.PENDING_PAYMENT.value: "Đơn chưa được thanh toán. Hãy thanh toán "
-            "hoặc đổi sang trả tại quầy trước khi báo đã đến.",
-            OrderStatus.COMPLETED.value: "Đơn đã hoàn thành.",
-            OrderStatus.CANCELLED.value: "Đơn đã bị hủy.",
-        }
-        raise HTTPException(status_code=409, detail=reasons.get(order.status, "Không thể báo đã đến"))
-
-    order.arrived_at = datetime.now(timezone.utc)
-    order.history.append(
-        OrderStatusHistory(
-            from_status=order.status,
-            to_status=order.status,
-            changed_by=user["id"],
-            note="Khách báo đã tới quầy",
-        )
-    )
+    change_status(order, S.CANCELLED, user["id"], note)
     db.commit()
     db.refresh(order)
     return order

@@ -64,13 +64,20 @@ def create_zalopay_payment(
 
     if order["customer_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Không đủ quyền")
-    if order["payment_method"] != "ZALOPAY":
-        raise HTTPException(status_code=400, detail="Đơn này chọn trả tại quầy")
-    if order["status"] != "PENDING_PAYMENT":
+    # Khách chỉ trả tiền khi đã tới trạm 1 và nhân viên đã nhận đơn (AWAITING_PAYMENT).
+    # PENDING_PAYMENT: đơn cũ của cách làm trước (trả ngay khi đặt).
+    if order["status"] == "HOLD":
+        raise HTTPException(
+            status_code=409,
+            detail="Vui lòng tới trạm 1 và đọc mã đơn cho nhân viên trước khi thanh toán",
+        )
+    if order["status"] not in ("AWAITING_PAYMENT", "PENDING_PAYMENT"):
         raise HTTPException(
             status_code=409,
             detail=f"Đơn đang ở trạng thái {order['status']}, không thể thanh toán",
         )
+    if order["payment_method"] != "ZALOPAY":
+        raise HTTPException(status_code=400, detail="Đơn này chọn trả tiền mặt tại trạm 1")
     amount = order["total_amount"]
     if not ZALOPAY_MIN_AMOUNT <= amount <= ZALOPAY_MAX_AMOUNT:
         raise HTTPException(
@@ -204,7 +211,23 @@ def mock_pay(txn_ref: str, success: bool = True, db: Session = Depends(get_db)):
     return {"result": result, "payment_status": payment.status}
 
 
-# ---------- Nhân viên: xác nhận đã thu tiền tại quầy ----------
+# ---------- Trạm 1: xác nhận đã thu tiền mặt, đơn vào bếp ----------
+# Đơn cũ (cách làm trước) thu tiền mặt lúc giao món: chỉ ghi nhận, không báo vào bếp
+LEGACY_CASH_STATUSES = ("CONFIRMED", "PREPARING", "READY", "ARRIVED")
+
+
+def _send_to_kitchen(order_id: int, txn_ref: str) -> None:
+    """Báo order-service đã thu tiền mặt: đơn chuyển sang CONFIRMED, vào hàng đợi bếp."""
+    try:
+        code, _ = order_client.mark_paid(order_id, txn_ref, "CASH")
+    except order_client.OrderServiceUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Order service không phản hồi, vui lòng bấm lại"
+        )
+    if code != 200:
+        raise HTTPException(status_code=409, detail="Không đưa được đơn vào bếp")
+
+
 @router.post("/cash/confirm", response_model=PaymentOut)
 def confirm_cash(
     payload: CashConfirm,
@@ -215,18 +238,26 @@ def confirm_cash(
 
     if user["role"] == "STAFF" and user["station_id"] != order["station_id"]:
         raise HTTPException(status_code=403, detail="Đơn này thuộc cửa hàng khác")
-    if order["payment_method"] != "CASH":
-        raise HTTPException(status_code=400, detail="Đơn này thanh toán qua ZaloPay")
-    if order["status"] in ("PENDING_PAYMENT", "CANCELLED"):
+    if order["status"] == "HOLD":
+        raise HTTPException(
+            status_code=409, detail="Đơn chưa được nhận ở trạm 1, hãy bấm Nhận đơn trước"
+        )
+    new_flow = order["status"] == "AWAITING_PAYMENT"
+    if not new_flow and order["status"] not in LEGACY_CASH_STATUSES:
         raise HTTPException(
             status_code=409,
             detail=f"Không thể thu tiền đơn đang ở trạng thái {order['status']}",
         )
+    if order["payment_method"] != "CASH":
+        raise HTTPException(status_code=400, detail="Đơn này thanh toán qua ZaloPay")
 
     txn_ref = f"CASH{payload.order_id}"
     existing = db.scalar(select(Payment).where(Payment.txn_ref == txn_ref))
     if existing:
-        return existing  # gọi lại nhiều lần vẫn an toàn
+        # Gọi lại nhiều lần vẫn an toàn; lần trước báo bếp lỗi thì báo lại
+        if new_flow:
+            _send_to_kitchen(payload.order_id, txn_ref)
+        return existing
 
     payment = Payment(
         order_id=payload.order_id,
@@ -246,6 +277,8 @@ def confirm_cash(
         return db.scalar(select(Payment).where(Payment.txn_ref == txn_ref))
     db.refresh(payment)
     PAYMENTS.labels("CASH", "success").inc()
+    if new_flow:
+        _send_to_kitchen(payload.order_id, txn_ref)
     return payment
 
 

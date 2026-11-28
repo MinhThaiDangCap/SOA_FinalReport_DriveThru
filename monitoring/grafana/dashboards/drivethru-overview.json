@@ -395,9 +395,9 @@
           "refId": "A"
         }
       ],
-      "title": "Nghiệp Vụ: Đơn Mới Theo Phương Thức Thanh Toán (order-service)",
+      "title": "Nghiệp Vụ: Đơn Vào Bếp Theo Phương Thức Thanh Toán (order-service)",
       "type": "timeseries",
-      "description": "Tổng số đơn đã tạo, chia theo ZALOPAY / CASH (cộng dồn từ lúc service khởi động)."
+      "description": "Số đơn đã trả tiền ở trạm 1 và được đưa vào bếp, chia theo ZALOPAY / CASH (cộng dồn từ lúc service khởi động)."
     },
     {
       "datasource": {

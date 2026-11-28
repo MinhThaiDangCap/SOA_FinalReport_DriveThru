@@ -6,8 +6,9 @@ Chạy sau khi `docker compose up -d --build` (chỉ cần Python 3, không cầ
     python scripts/smoke_test.py --base-url https://<domain>.ngrok-free.app   # qua ngrok
 
 Script đi hết một vòng nghiệp vụ như người dùng thật và dừng ở bước đầu tiên bị sai:
-đăng nhập 3 vai trò -> xem menu -> đặt đơn trả tại quầy -> quầy làm món, thu tiền, giao món
--> khách đánh giá -> tạo giao dịch ZaloPay -> kiểm tra bảo mật (token, phân quyền, /internal).
+đăng nhập 4 vai trò -> xem menu -> đặt trước, nhận mã -> trạm 1 đọc mã, thu tiền mặt
+-> bếp làm món (đơn nhanh trước) -> trạm 2 giao món -> khách đánh giá
+-> trạm 1 nhận đơn trả ZaloPay, tạo giao dịch -> kiểm tra bảo mật (token, phân quyền, /internal).
 Dữ liệu tạo ra là đơn và đánh giá thật trong database (tài khoản mẫu, cửa hàng 1).
 """
 
@@ -76,12 +77,14 @@ def main():
     print("1. Đăng nhập (auth-service)")
     tokens = {}
     for role, email in (("khách", "khachhang@drivethru.vn"),
-                        ("nhân viên", "staff1@drivethru.vn"),
+                        ("nhân viên trạm", "staff1@drivethru.vn"),
+                        ("bếp", "kitchen1@drivethru.vn"),
                         ("admin", "admin@drivethru.vn")):
         data = expect(api, f"Đăng nhập {role}", "POST", "/api/auth/login", 200,
                       body={"email": email, "password": PASSWORD})
         tokens[role] = data["access_token"]
-    customer, staff, admin = tokens["khách"], tokens["nhân viên"], tokens["admin"]
+    customer, staff, kitchen, admin = (tokens["khách"], tokens["nhân viên trạm"],
+                                       tokens["bếp"], tokens["admin"])
     expect(api, "Sai mật khẩu bị từ chối", "POST", "/api/auth/login", 401,
            body={"email": "khachhang@drivethru.vn", "password": "SaiMatKhau1"})
 
@@ -93,32 +96,64 @@ def main():
     check("Có món còn hàng", len(items) >= 1, menu)
     item = items[0]
 
-    print("\n3. Đặt đơn trả tại quầy (order-service gọi menu-service)")
-    order = expect(api, "Tạo đơn", "POST", "/api/orders", 201, token=customer, body={
-        "station_id": 1, "license_plate": "51A-99999", "payment_method": "CASH",
-        "items": [{"menu_item_id": item["id"], "quantity": 2}],
-    })
-    oid = order["id"]
-    check("Giá tính ở server", order["total_amount"] == item["price"] * 2, order)
-    check("Đơn tiền mặt vào thẳng hàng đợi (CONFIRMED)", order["status"] == "CONFIRMED", order)
-    check("Có giờ xong dự kiến", bool(order.get("estimated_ready_at")), order)
-    expect(api, "Thời gian chờ các cửa hàng", "GET", "/api/orders/wait-times", 200)
+    def place(qty):
+        return expect(api, f"Đặt trước {qty} phần", "POST", "/api/orders", 201, token=customer, body={
+            "station_id": 1, "license_plate": "51A-999.99", "contact_phone": "0909999999",
+            "arrival_minutes": 15, "items": [{"menu_item_id": item["id"], "quantity": qty}],
+        })
 
-    print("\n4. Quầy xử lý đơn (order-service, payment-service)")
-    queue = expect(api, "Hàng đợi của nhân viên", "GET", "/api/orders/queue", 200, token=staff)
-    check("Đơn mới có trong hàng đợi", any(o["id"] == oid for o in queue))
-    for st in ("PREPARING", "READY"):
-        expect(api, f"Chuyển sang {st}", "PATCH", f"/api/orders/{oid}/status", 200,
-               token=staff, body={"status": st})
-    expect(api, "Chưa thu tiền thì không hoàn thành được", "PATCH", f"/api/orders/{oid}/status",
-           409, token=staff, body={"status": "COMPLETED"})
-    expect(api, "Ghi nhận đã thu tiền mặt", "POST", "/api/payments/cash/confirm", 200,
+    print("\n3. Đặt trước trên web (order-service gọi menu-service)")
+    order = place(2)
+    oid, code = order["id"], order["pickup_code"]
+    check("Giá tính ở server", order["total_amount"] == item["price"] * 2, order)
+    check(f"Có mã nhận món 4 số ({code}), đơn đang giữ chỗ (HOLD)",
+          order["status"] == "HOLD" and len(code or "") == 4, order)
+    check("Chưa vào bếp nên chưa có giờ xong", order.get("estimated_ready_at") is None, order)
+
+    print("\n4. Trạm 1: đọc mã, thu tiền mặt (order-service, payment-service)")
+    found = expect(api, "Tìm đơn theo mã", "GET", f"/api/orders/station/lookup?q={code}", 200, token=staff)
+    check("Tìm đúng đơn", [o["id"] for o in found] == [oid], found)
+    expect(api, "Bếp không nhận đơn ở trạm 1 -> 403", "POST", f"/api/orders/{oid}/check-in", 403,
+           token=kitchen, body={"payment_method": "CASH"})
+    expect(api, "Chưa nhận đơn thì chưa thu tiền", "POST", "/api/payments/cash/confirm", 409,
            token=staff, body={"order_id": oid})
-    done = expect(api, "Giao món, hoàn thành đơn", "PATCH", f"/api/orders/{oid}/status", 200,
+    expect(api, "Nhận đơn, khách trả tiền mặt", "POST", f"/api/orders/{oid}/check-in", 200,
+           token=staff, body={"payment_method": "CASH"})
+    expect(api, "Đã thu tiền mặt, đơn vào bếp", "POST", "/api/payments/cash/confirm", 200,
+           token=staff, body={"order_id": oid})
+    order = expect(api, "Xem đơn", "GET", f"/api/orders/{oid}", 200, token=customer)
+    check("Đơn đã vào bếp (CONFIRMED) và có giờ xong", order["status"] == "CONFIRMED"
+          and bool(order.get("estimated_ready_at")), order)
+
+    print("\n5. Bếp làm món, trạm 2 giao")
+    quick = place(1)
+    expect(api, "Nhận đơn thứ 2", "POST", f"/api/orders/{quick['id']}/check-in", 200,
+           token=staff, body={"payment_method": "CASH"})
+    expect(api, "Thu tiền đơn thứ 2", "POST", "/api/payments/cash/confirm", 200,
+           token=staff, body={"order_id": quick["id"]})
+    queue = expect(api, "Hàng đợi bếp", "GET", "/api/orders/kitchen", 200, token=kitchen)
+    ids = [o["id"] for o in queue]
+    check("Bếp thấy cả 2 đơn đã trả tiền", oid in ids and quick["id"] in ids, ids)
+    expect(api, "Nhân viên trạm không làm việc của bếp -> 403", "PATCH", f"/api/orders/{oid}/status",
+           403, token=staff, body={"status": "PREPARING"})
+    for st in ("PREPARING", "READY"):
+        expect(api, f"Bếp chuyển sang {st}", "PATCH", f"/api/orders/{oid}/status", 200,
+               token=kitchen, body={"status": st})
+    ready = expect(api, "Trạm 2 thấy đơn đã xong", "GET", "/api/orders/station/ready", 200, token=staff)
+    check("Đơn có trong danh sách trạm 2", any(o["id"] == oid for o in ready), ready)
+    expect(api, "Bếp không giao món -> 403", "PATCH", f"/api/orders/{oid}/status", 403,
+           token=kitchen, body={"status": "COMPLETED"})
+    done = expect(api, "Trạm 2 giao món", "PATCH", f"/api/orders/{oid}/status", 200,
                   token=staff, body={"status": "COMPLETED"})
     check("Trạng thái COMPLETED", done["status"] == "COMPLETED", done)
+    for st in ("PREPARING", "READY"):
+        expect(api, f"Bếp làm đơn thứ 2: {st}", "PATCH", f"/api/orders/{quick['id']}/status", 200,
+               token=kitchen, body={"status": st})
+    expect(api, "Trạm 2 giao đơn thứ 2", "PATCH", f"/api/orders/{quick['id']}/status", 200,
+           token=staff, body={"status": "COMPLETED"})
+    expect(api, "Thời gian chờ các cửa hàng", "GET", "/api/orders/wait-times", 200)
 
-    print("\n5. Khách đánh giá (feedback-service gọi order-service)")
+    print("\n6. Khách đánh giá (feedback-service gọi order-service)")
     expect(api, "Đánh giá 1 sao không lý do bị chặn", "POST", "/api/reviews", 422,
            token=customer, body={"order_id": oid, "rating": 1})
     expect(api, "Gửi đánh giá 5 sao", "POST", "/api/reviews", 201,
@@ -127,23 +162,22 @@ def main():
            token=customer, body={"order_id": oid, "rating": 4})
     expect(api, "Thống kê đánh giá cửa hàng 1", "GET", "/api/reviews/stations/1/stats", 200)
 
-    print("\n6. Thanh toán ZaloPay (payment-service gọi ZaloPay sandbox)")
-    zp_order = expect(api, "Tạo đơn ZaloPay", "POST", "/api/orders", 201, token=customer, body={
-        "station_id": 1, "license_plate": "51A-99999", "payment_method": "ZALOPAY",
-        "items": [{"menu_item_id": item["id"], "quantity": 1}],
-    })
-    check("Đơn ZaloPay chờ thanh toán", zp_order["status"] == "PENDING_PAYMENT", zp_order)
+    print("\n7. Trạm 1: khách trả ZaloPay trên điện thoại (payment-service gọi ZaloPay)")
+    zp = place(1)
+    expect(api, "Chưa tới trạm 1 thì chưa tạo được giao dịch", "POST", "/api/payments/zalopay/create",
+           409, token=customer, body={"order_id": zp["id"]})
+    expect(api, "Trạm 1 nhận đơn, khách chọn ZaloPay", "POST", f"/api/orders/{zp['id']}/check-in", 200,
+           token=staff, body={"payment_method": "ZALOPAY"})
     pay = expect(api, "Tạo giao dịch ZaloPay", "POST", "/api/payments/zalopay/create", 201,
-                 token=customer, body={"order_id": zp_order["id"]})
+                 token=customer, body={"order_id": zp["id"]})
     url = pay.get("payment_url", "")
     mode = "giả lập (PAYMENT_MOCK_MODE=true)" if "/mock/" in url else "ZaloPay sandbox"
     check(f"Có link thanh toán, chế độ: {mode}", url.startswith("http"), pay)
-    expect(api, "Hủy đơn ZaloPay chưa trả", "POST", f"/api/orders/{zp_order['id']}/cancel", 200,
-           token=customer)
+    expect(api, "Hủy đơn chưa trả tiền", "POST", f"/api/orders/{zp['id']}/cancel", 200, token=customer)
 
-    print("\n7. Bảo mật")
+    print("\n8. Bảo mật")
     expect(api, "Không có token -> 401", "GET", "/api/orders/me", 401)
-    expect(api, "Khách không xem được hàng đợi quầy -> 403", "GET", "/api/orders/queue", 403,
+    expect(api, "Khách không xem được hàng đợi bếp -> 403", "GET", "/api/orders/kitchen", 403,
            token=customer)
     expect(api, "Khách không tạo được nhân viên -> 403", "POST", "/api/auth/staff", 403,
            token=customer, body={"email": "x@drivethru.vn", "password": PASSWORD,

@@ -44,6 +44,11 @@ AUTH_REGISTRATIONS_TOTAL = Counter(
 )
 
 
+# Tài khoản do ADMIN quản lý, luôn gắn với một chi nhánh:
+# STAFF = nhân viên trạm 1 / trạm 2, KITCHEN = bếp
+STAFF_ROLES = ("STAFF", "KITCHEN")
+
+
 def seed_default_accounts():
     """Tự động tạo sẵn các tài khoản mẫu (ADMIN, Nhân viên, Khách hàng) để demo và xem ngay trong TablePlus."""
     db = SessionLocal()
@@ -60,7 +65,7 @@ def seed_default_accounts():
             {
                 "email": "staff1@drivethru.vn",
                 "password": "Password123",
-                "full_name": "Trần Văn Bếp (CN Quận 7)",
+                "full_name": "Trần Văn Quầy (CN Quận 7)",
                 "phone": "0902222222",
                 "role": "STAFF",
                 "station_id": 1,  # GoLane Quận 7 (xem menu-service/app/seed.py)
@@ -80,6 +85,31 @@ def seed_default_accounts():
                 "phone": "0904444444",
                 "role": "STAFF",
                 "station_id": 3,  # GoLane Bình Thạnh
+            },
+            # Bếp: mỗi chi nhánh một tài khoản, chỉ vào được màn hình Bếp của chi nhánh đó
+            {
+                "email": "kitchen1@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Bếp GoLane Quận 7",
+                "phone": "0905555551",
+                "role": "KITCHEN",
+                "station_id": 1,
+            },
+            {
+                "email": "kitchen2@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Bếp GoLane Thủ Đức",
+                "phone": "0905555552",
+                "role": "KITCHEN",
+                "station_id": 2,
+            },
+            {
+                "email": "kitchen3@drivethru.vn",
+                "password": "Password123",
+                "full_name": "Bếp GoLane Bình Thạnh",
+                "phone": "0905555553",
+                "role": "KITCHEN",
+                "station_id": 3,
             },
             {
                 "email": "khachhang@drivethru.vn",
@@ -329,7 +359,7 @@ def create_staff(
         hashed_password=hash_password(req.password),
         full_name=req.full_name,
         phone=req.phone,
-        role="STAFF",
+        role=req.role,
         station_id=req.station_id,
     )
     db.add(new_staff)
@@ -353,7 +383,12 @@ def list_staff(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Chỉ ADMIN mới được xem danh sách nhân viên.",
         )
-    return db.query(User).filter(User.role == "STAFF").order_by(User.id.asc()).all()
+    return (
+        db.query(User)
+        .filter(User.role.in_(STAFF_ROLES))
+        .order_by(User.id.asc())
+        .all()
+    )
 
 
 @app.patch(
@@ -369,7 +404,7 @@ def toggle_staff_status(
 ):
     if current_payload.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Chỉ ADMIN mới có quyền thực hiện.")
-    staff = db.query(User).filter(User.id == staff_id, User.role == "STAFF").first()
+    staff = db.query(User).filter(User.id == staff_id, User.role.in_(STAFF_ROLES)).first()
     if not staff:
         raise HTTPException(status_code=404, detail="Không tìm thấy nhân viên.")
     staff.is_active = not staff.is_active

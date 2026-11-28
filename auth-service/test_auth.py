@@ -124,6 +124,38 @@ def test_admin_create_and_toggle_staff():
     assert toggle_res.json()["is_active"] is False
 
 
+def test_admin_creates_kitchen_account_bound_to_station():
+    db = TestingSessionLocal()
+    db.add(User(email="admin@drivethru.vn", hashed_password=hash_password("Password123"),
+                full_name="Admin Test", role="ADMIN"))
+    db.commit()
+    db.close()
+    token = client.post("/api/auth/login", json={
+        "email": "admin@drivethru.vn", "password": "Password123"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    res = client.post("/api/auth/staff", headers=headers, json={
+        "email": "bep@drivethru.vn", "password": "Password123",
+        "full_name": "Bếp Chi Nhánh 2", "station_id": 2, "role": "KITCHEN"})
+    assert res.status_code == 201
+    assert res.json()["role"] == "KITCHEN" and res.json()["station_id"] == 2
+
+    # Không tạo được vai trò khác (ADMIN, CUSTOMER) qua API nhân viên
+    bad = client.post("/api/auth/staff", headers=headers, json={
+        "email": "x@drivethru.vn", "password": "Password123",
+        "full_name": "Không Hợp Lệ", "station_id": 1, "role": "ADMIN"})
+    assert bad.status_code == 422
+
+    # Đăng nhập bếp: token mang role KITCHEN và chi nhánh 2
+    login = client.post("/api/auth/login", json={
+        "email": "bep@drivethru.vn", "password": "Password123"})
+    assert login.json()["user"]["role"] == "KITCHEN"
+    assert login.json()["user"]["station_id"] == 2
+
+    listed = client.get("/api/auth/staff", headers=headers).json()
+    assert any(u["email"] == "bep@drivethru.vn" for u in listed)
+
+
 # ---------- Lỗi đầu vào, xác thực và phân quyền ----------
 def register(email="khach@drivethru.vn", password="Password123", **extra):
     return client.post(

@@ -55,7 +55,7 @@ def settle(
 
     if success:
         try:
-            code, _ = order_client.mark_paid(payment.order_id, transaction_ref)
+            code, _ = order_client.mark_paid(payment.order_id, transaction_ref, payment.method)
         except order_client.OrderServiceUnavailable:
             db.rollback()
             return "retry"

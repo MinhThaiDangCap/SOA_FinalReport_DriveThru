@@ -11,9 +11,12 @@ class OrderItemIn(BaseModel):
 
 
 class OrderCreate(BaseModel):
+    """Đặt trước trên web: chưa trả tiền, khách trả ở trạm 1 (tiền mặt hoặc ZaloPay)."""
     station_id: int = Field(gt=0)
     license_plate: str = Field(min_length=4, max_length=15)
-    payment_method: Literal["ZALOPAY", "CASH"]
+    contact_phone: str = Field(pattern=r"^0\d{9}$", description="Số điện thoại 10 số")
+    # Khách sẽ tới trạm 1 trong bao nhiêu phút; đơn được giữ thêm 10 phút du di
+    arrival_minutes: Literal[15, 30, 45] = 30
     coupon_code: str | None = Field(default=None, max_length=30)
     items: list[OrderItemIn] = Field(min_length=1)
 
@@ -29,8 +32,21 @@ class OrderCreate(BaseModel):
         return v or None
 
 
-class PaymentMethodUpdate(BaseModel):
+class CheckIn(BaseModel):
+    """Trạm 1 nhận đơn: khách chọn trả tiền mặt hay ZaloPay ngay tại trạm.
+
+    Gọi lại khi đơn đang chờ thanh toán để đổi cách trả (ví dụ ZaloPay lỗi, trả tiền mặt).
+    """
     payment_method: Literal["ZALOPAY", "CASH"]
+
+
+class PlateUpdate(BaseModel):
+    license_plate: str = Field(min_length=4, max_length=15)
+
+    @field_validator("license_plate")
+    @classmethod
+    def normalize_plate(cls, v: str) -> str:
+        return v.strip().upper()
 
 
 # ---------- Response ----------
@@ -62,12 +78,19 @@ class OrderOut(BaseModel):
     station_id: int
     license_plate: str
     status: str
-    payment_method: str
+    payment_method: str | None = None   # chọn ở trạm 1
+    pickup_code: str | None = None      # mã 4 số khách đọc ở trạm 1 và trạm 2
+    contact_phone: str | None = None
     subtotal: int
     discount_amount: int
     total_amount: int
     coupon_code: str | None
-    arrived_at: datetime | None = None  # khách đã báo tới quầy (độc lập với status)
+    expected_arrival_at: datetime | None = None  # giờ khách hẹn tới trạm 1
+    hold_expires_at: datetime | None = None      # quá giờ này nhân viên được hủy đơn treo
+    is_overdue: bool = False
+    checked_in_at: datetime | None = None        # trạm 1 nhận đơn
+    confirmed_at: datetime | None = None         # đã trả tiền, vào bếp
+    arrived_at: datetime | None = None           # cách làm cũ, đơn mới không dùng
     prep_minutes: int = 0               # số phút bếp cần để làm cả đơn
     estimated_ready_at: datetime | None = None  # giờ dự kiến món xong
     created_at: datetime
@@ -75,8 +98,8 @@ class OrderOut(BaseModel):
     history: list[StatusHistoryOut]
     
 class StatusUpdate(BaseModel):
-    # Nhân viên chỉ được đặt 3 trạng thái này.
-    # CONFIRMED do payment-service báo, CANCELLED do khách; khách tới quầy là cờ arrived_at.
+    # Bếp: PREPARING, READY. Trạm 2: COMPLETED.
+    # AWAITING_PAYMENT do trạm 1 (check-in), CONFIRMED do payment-service báo đã trả tiền.
     status: Literal["PREPARING", "READY", "COMPLETED"]
     note: str | None = Field(default=None, max_length=200)
 
@@ -105,13 +128,16 @@ class InternalOrderOut(BaseModel):
     customer_id: int
     station_id: int
     status: str
-    payment_method: str
+    payment_method: str | None = None
     total_amount: int
 
 
 class PaymentConfirmIn(BaseModel):
     transaction_ref: str | None = Field(default=None, max_length=100)
-    
+    # Cách khách đã trả thật sự (payment-service biết rõ); None ở phiên bản cũ
+    method: Literal["ZALOPAY", "CASH"] | None = None
+
+
     # ---------- Mã giảm giá ----------
 class CouponCreate(BaseModel):
     code: str = Field(min_length=3, max_length=30, pattern=r"^[A-Za-z0-9_-]+$")

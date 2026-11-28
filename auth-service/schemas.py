@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -21,6 +21,9 @@ class CreateStaffRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     phone: Optional[str] = Field(None, pattern=r"^0\d{9}$")
     station_id: int = Field(..., ge=1, description="ID cửa hàng nhân viên phụ trách")
+    role: Literal["STAFF", "KITCHEN"] = Field(
+        "STAFF", description="STAFF: nhân viên trạm 1/trạm 2, KITCHEN: bếp"
+    )
 
 
 class RefreshRequest(BaseModel):

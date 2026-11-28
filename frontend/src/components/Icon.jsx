@@ -100,6 +100,13 @@ const PATHS = {
       <path d="M14.5 4v2M14.5 10v2M14.5 16v2" />
     </>
   ),
+  printer: (
+    <>
+      <path d="M7 8V3.5h10V8" />
+      <rect x="3.5" y="8" width="17" height="8.5" rx="1.5" />
+      <path d="M7 14h10v6.5H7z" />
+    </>
+  ),
   wallet: (
     <>
       <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3" />
